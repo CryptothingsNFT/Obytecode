@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "esNext",
+    "esModuleInterop": true,
+    "target": "esNext",
+    //"noImplicitAny": true,
+    "moduleResolution": "node",
+    "sourceMap": true,
+    //"noUnusedParameters": true,
+    "baseUrl": ".",
+    "importsNotUsedAsValues": "error",
+  },
+  "include": [
+    "node_modules/@types/node/globals.d.ts"
+  ]
+}
