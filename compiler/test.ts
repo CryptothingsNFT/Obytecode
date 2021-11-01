@@ -14,7 +14,7 @@ const initSection: string = `init: "{
         $a = $false OTHERWISE $ret;
         \${'name' || 3} = $ret || 10;
         $nameLast = \${'name' || 3} || \${'name' || 3};
-        if (true == false)
+        if (2 != 2)
             bounce("if");
         else
             bounce("else");

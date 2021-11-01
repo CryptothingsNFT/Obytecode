@@ -92,9 +92,39 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                     state.pop();
                     break;
                 case Instructions.EQUAL: {
-                    lhs = state.pop();
                     rhs = state.pop();
+                    lhs = state.pop();
                     state.push(lhs === rhs);
+                    break;
+                }
+                case Instructions.NEQUAL: {
+                    rhs = state.pop();
+                    lhs = state.pop();
+                    state.push(lhs !== rhs);
+                    break;
+                }
+                case Instructions.GT: {
+                    rhs = state.pop();
+                    lhs = state.pop();
+                    state.push(lhs > rhs);
+                    break;
+                }
+                case Instructions.GTE: {
+                    rhs = state.pop();
+                    lhs = state.pop();
+                    state.push(lhs >= rhs);
+                    break;
+                }
+                case Instructions.LT: {
+                    rhs = state.pop();
+                    lhs = state.pop();
+                    state.push(lhs < rhs);
+                    break;
+                }
+                case Instructions.LTE: {
+                    rhs = state.pop();
+                    lhs = state.pop();
+                    state.push(lhs <= rhs);
                     break;
                 }
                 case Instructions.IS_TRUTHY: {

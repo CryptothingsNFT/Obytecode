@@ -222,10 +222,17 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
                 ...elseBody
             )
         }
-        else if (n[0] === 'comparison' && n[1] === '=='){
+        else if (n[0] === 'comparison'){
+            const comparison: number =
+                  n[1] === '==' ? Instructions.EQUAL
+                : n[1] === '>'  ? Instructions.GT
+                : n[1] === '<'  ? Instructions.LT
+                : n[1] === '>=' ? Instructions.GTE
+                : n[1] === '<=' ? Instructions.LTE
+                : Instructions.NEQUAL;
             const op1: Array<any> = Array.isArray(n[2]) ? toBytecode(n[2]) : [Instructions.IMM, n[2]];
             const op2: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]): [Instructions.IMM, n[3]];
-            bytecode.push(...op1, ...op2, Instructions.EQUAL);
+            bytecode.push(...op1, ...op2, comparison);
             return bytecode;
         }
         else
