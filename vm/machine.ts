@@ -139,6 +139,13 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                     state.push(object[key]);
                     break;
                 }
+                case Instructions.DEF: {
+                    const value: any = state.pop();
+                    const key: string = state.pop();
+                    const object: Array<any> | Record<string, any> = state.peek(-1);
+                    object[key] = value;
+                    break;
+                }
                 case Instructions.SET: {
                     const key: string = state.pop();
                     const value: any = state.pop();

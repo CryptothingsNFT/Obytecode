@@ -69,13 +69,13 @@ const code: string = `{
 const parsed: [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}] = parse(code) as [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}];
 const {bounce_fees, init, messages, getters} = parsed[1];
 const initBytecode: Array<any> = toBytecode(init);
-const vm: VMInterface = makeVm();
+const vm: VMInterface = makeVm({debug: true, log: true});
 
 
 
 
 
-vm.load(initBytecode, {this_address: "THIS_ADDRESS", mci: 1, timestamp: Math.trunc(Date.now() / 1000), trigger: {unit: "TRIGGER_UNIT", initial_unit: "TRIGGER_UNIT", address: 'TRIGGER_ADDRESS', output: {base: 3000}, outputs: {base: 3000}}});
+vm.load(initBytecode, {this_address: "RO7ZAGVJPBOZFH4NMDGZGY4IRILNNEUQ", mci: 1, timestamp: Math.trunc(Date.now() / 1000), trigger: {unit: "TRIGGER_UNIT", initial_unit: "TRIGGER_UNIT", address: 'TRIGGER_ADDRESS', output: {base: 3000}, outputs: {base: 3000}}});
 const strippedInit: string = `{${initSection.replaceAll(' ', '').replaceAll('\t', '').replaceAll('\n', '')}}`;
 console.log("Oscript", strippedInit, strippedInit.length);
 console.log('Tape length', initBytecode.length);

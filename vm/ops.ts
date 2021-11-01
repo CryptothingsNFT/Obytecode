@@ -254,6 +254,18 @@ export const InstructionSet: Record<string, Opcode> = {
         },
         gas: 1
     },
+    DEF: { //Defines a property in an object. The stack must end with [..., object, key, value]. The object is not popped from the stack.
+        code: 44,
+        assert(){
+            const key = this.peek(-2);
+            const object = this.peek(-3);
+            if (typeof object !== 'object')
+                return this.abort(`DEF OPCODE: target should be object or array`);
+            if (typeof key !== 'number' && typeof key !== 'string')
+                return this.abort(`DEF OPCODE: key should be string or number`);
+        },
+        gas: 1
+    },
     DBG: {
         code: 1337,
         gas: 0

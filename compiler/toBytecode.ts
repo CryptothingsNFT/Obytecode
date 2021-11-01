@@ -12,7 +12,7 @@ let ctx: CTX = {
     varReplacement: {}
 }
 
-const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
+const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=>{
     if (!Array.isArray(ast[0]))
         ast = [ast];
     ast.forEach((n: Array<any>)=>{
@@ -23,7 +23,7 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
             const varname = Array.isArray(n[1]) ? toBytecode(n[1]) : [n[1]];
             const isIMMNeeded = !Array.isArray(n[1]);
             // @ts-ignore
-            if (ctx.var2address[varname] !== undefined) //The variable name was known at compile time
+            if (ctx.var2address[varname] !== undefined) //The variable name was known at compile time TODO MIGHT BE BUGGY
                 { // @ts-ignore
                     bytecode.push(Instructions.LOAD, ctx.var2address[varname]);
                 }
@@ -92,11 +92,54 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
                     }
                     else if (isBinaryOp(n[2][0]))
                         bytecode.push(...toBytecode(n[2]), Instructions.MEM, ctx.var2address[varname]);
-                    else
-                        throw new Error(`local_var_assignment of unknown expression ${n[2]}`);
+                    else if (n[2][0] === 'array'){ //Defining an array
+                        ctx.currentMemorySlot--;
+                        ctx.var2address[varname] = ctx.currentMemorySlot;
+                        ctx.address2var[ctx.currentMemorySlot] = varname;
+                        bytecode.push(
+                            Instructions.IMM, [],
+                            Instructions.MEM, ctx.var2address[varname],
+                            ...toBytecode(n[2], [], {array: varname})
+                            );
+                        ctx.currentMemorySlot++;
+                        return bytecode;
+                    }
+                    else {
+                        const value = toBytecode(n[2]);
+                        bytecode.push(
+                            ...value,
+                            Instructions.MEM, ctx.var2address[varname]
+                        );
+                    }
+                    //else
+                    //    throw new Error(`[COMPILER] local_var_assignment of unknown expression ${JSON.stringify(n)}`);
                     return bytecode;
                 }
             }
+        }
+        else if (n[0] === "array") { //Array initialization
+            //Load the array object
+            bytecode.push(Instructions.LOAD, ctx.var2address[localCtx.array]);
+            n[1]?.forEach((x, i)=>{
+                const value: Array<any> = Array.isArray(x) ? toBytecode(x) : [Instructions.IMM, typeVar(x)];
+                bytecode.push(
+                    Instructions.IMM, i,
+                    ...value,
+                    Instructions.DEF
+                );
+            });
+            bytecode.push(Instructions.POP_HEAD); //Delete the object from the head (will persist in memory)
+            return bytecode;
+        }
+        else if (n[0] === "with_selectors") {
+            const object: Array<any> = toBytecode(n[1]);
+            const key: Array<any> = Array.isArray(n[2][0]) ? toBytecode(n[2]) : [Instructions.IMM, typeVar(n[2][0])];
+            bytecode.push(
+                ...object,
+                ...key,
+                Instructions.PICK
+            );
+            return bytecode;
         }
         else if (n[0] === "bounce") {
             if (!Array.isArray(n[1]))
@@ -208,7 +251,6 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
             );
         }
         else if (n[0] === 'ifelse'){
-            console.log("ifelse", n);
             const condition: Array<any> = Array.isArray(n[1])
                 ? toBytecode(n[1])
                 : [Instructions.IMM, n[1]]; //Possible optimization here. The if is a constant value which can be evaluated during compilation
