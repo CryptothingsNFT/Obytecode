@@ -12,10 +12,10 @@ let ctx: CTX = {
     varReplacement: {}
 }
 
-const toBytecode = (ast, bytecode: Array<any> = [])=>{
+const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
     if (!Array.isArray(ast[0]))
         ast = [ast];
-    ast.forEach((n)=>{
+    ast.forEach((n: Array<any>)=>{
         ctx.node++;
         if (n[0] === 'main')
             return toBytecode(n[1], bytecode);
@@ -38,8 +38,8 @@ const toBytecode = (ast, bytecode: Array<any> = [])=>{
         else if (n[0] === 'local_var_assignment') {
             const usesMap: boolean = Array.isArray(n[1]) || (n[2][0] === 'local_var' && Array.isArray(n[2][1]));
             if (usesMap){
-                const key = Array.isArray(n[1]) ? toBytecode(n[1]) : [n[1]];
-                const value = Array.isArray(n[2]) ? toBytecode(n[2]) : [n[2]];
+                const key: Array<any> = Array.isArray(n[1]) ? toBytecode(n[1]) : [n[1]];
+                const value: Array<any> = Array.isArray(n[2]) ? toBytecode(n[2]) : [n[2]];
                 const isKeyIMM: boolean = !Array.isArray(n[1]);
                 if (isKeyIMM) {
                     bytecode.push(
@@ -132,7 +132,7 @@ const toBytecode = (ast, bytecode: Array<any> = [])=>{
                     Instructions.DUP_HEAD,
                     Instructions.IS_TRUTHY,
                     Instructions.IMM, true,
-                    //If operator 1 is truthy we need to skip a pushing op2 into the stack
+                    //If operator 1 is truthy we need to skip pushing op2 into the stack
                     Instructions.SKIP_EQ, op2.length+1,
                     //Delete duped head
                     Instructions.POP_HEAD,
@@ -161,10 +161,9 @@ const toBytecode = (ast, bytecode: Array<any> = [])=>{
                 n[2] = 'base';
                 n[1] = null;
             }
-            const ofAddress = typeof n[1] === 'string' ? [Instructions.IMM, n[1]] : toBytecode(['this_address']);
+            const ofAddress: Array<any> = typeof n[1] === 'string' ? [Instructions.IMM, n[1]] : toBytecode(['this_address']);
 
-            const asset =
-                typeof n[2] === 'string' ? [Instructions.IMM, n[2]] : toBytecode(n[2]); //Wanted to read an expression
+            const asset: Array<any> = typeof n[2] === 'string' ? [Instructions.IMM, n[2]] : toBytecode(n[2]); //Wanted to read an expression
             bytecode.push(
                 ...ofAddress,
                 Instructions.REG, REGISTERS.ADDRESS_REGISTRY1,
@@ -179,8 +178,8 @@ const toBytecode = (ast, bytecode: Array<any> = [])=>{
                 n[2] = n[1];
                 n[1] = ['this_address'];
             }
-            const name = Array.isArray(n[2]) ? toBytecode(n[2]) : [Instructions.IMM, n[2]];
-            const address = Array.isArray(n[1]) ? toBytecode(n[1]) : [Instructions.IMM, n[1]];
+            const name: Array<any> = Array.isArray(n[2]) ? toBytecode(n[2]) : [Instructions.IMM, n[2]];
+            const address: Array<any> = Array.isArray(n[1]) ? toBytecode(n[1]) : [Instructions.IMM, n[1]];
             bytecode.push(
                 ...address,
                 Instructions.REG, REGISTERS.ADDRESS_REGISTRY1,
@@ -190,8 +189,8 @@ const toBytecode = (ast, bytecode: Array<any> = [])=>{
             return bytecode;
         }
         else if (n[0] === 'asset'){
-            const hash = Array.isArray(n[1]) ? toBytecode(n[1]) : [Instructions.IMM, n[1]];
-            const field = Array.isArray(n[2]) ? toBytecode(n[2]) : [Instructions.IMM, n[2]];
+            const hash: Array<any> = Array.isArray(n[1]) ? toBytecode(n[1]) : [Instructions.IMM, n[1]];
+            const field: Array<any> = Array.isArray(n[2]) ? toBytecode(n[2]) : [Instructions.IMM, n[2]];
             bytecode.push(
                 ...hash,
                 Instructions.REG, REGISTERS.ASSET_REGISTRY,

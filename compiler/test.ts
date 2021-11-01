@@ -1,6 +1,8 @@
 import parse from "./toAST";
 import toBytecode from "./toBytecode";
 import {makeVm} from "../vm/machine";
+import {run as hostRun} from "../vm/host";
+import type {VMInterface} from "../vm/types";
 
 const initSection: string = `init: "{
         $foo = 77;
@@ -59,19 +61,21 @@ const code: string = `{
 \t\t}
 \t}`
 
-try{
-    const parsed: [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}] = parse(code) as [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}];
-    const {bounce_fees, init, messages, getters} = parsed[1];
-    const initBytecode: Array<any> = toBytecode(init);
-    const {load, run} = makeVm();
-    load(initBytecode, {trigger_unit: "TRIGGER_UNIT", this_address: "THIS_ADDRESS"});
-    const strippedInit: string = `{${initSection.replaceAll(' ', '').replaceAll('\t', '').replaceAll('\n', '')}}`;
-    console.log("Oscript", strippedInit, strippedInit.length);
-    console.log('Tape length', initBytecode.length);
 
-    console.log("BEGIN EXECUTION:");
-    console.log(run());
-    console.log("EXECUTION ENDED");
-} catch (e){
-    console.error(e);
-}
+const parsed: [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}] = parse(code) as [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}];
+const {bounce_fees, init, messages, getters} = parsed[1];
+const initBytecode: Array<any> = toBytecode(init);
+const vm: VMInterface = makeVm();
+
+
+
+
+
+vm.load(initBytecode, {trigger_unit: "TRIGGER_UNIT", this_address: "THIS_ADDRESS"});
+const strippedInit: string = `{${initSection.replaceAll(' ', '').replaceAll('\t', '').replaceAll('\n', '')}}`;
+console.log("Oscript", strippedInit, strippedInit.length);
+console.log('Tape length', initBytecode.length);
+
+console.log("BEGIN EXECUTION:");
+console.log(await hostRun(vm));
+console.log("EXECUTION ENDED");

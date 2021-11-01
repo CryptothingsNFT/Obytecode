@@ -1,10 +1,12 @@
 import Routines from "./routines";
 import {Instructions} from "./ops";
 import {makeVm} from "./machine";
+import {run as hostRun} from "./host";
+import type {VMInterface} from "./types";
 
-const {load, run} = makeVm({log: true});
+const vm: VMInterface = makeVm({log: true});
 
-load([
+vm.load([
     //this imports a routine called read_data_feed. Importing supports renaming the imported function by passing a second argument
     ...Routines.READ_DATA_FEED({address: "RO7ZAGVJPBOZFH4NMDGZGY4IRILNNEUQ", feed_name: "GBYTE_USD", max_mci: 1000}),
     //Call read_data_feed routine
@@ -23,5 +25,5 @@ load([
     Instructions.SET_STATE_VAR
 ], {this_address: "MY_ADDRESS", trigger_unit: "TRIGGER_UNIT"});
 
-console.log(run());
+console.log(await hostRun(vm));
 //Logs { stack: [], gas: 1125, stateChanges: { result: '42' }, apps: [] }

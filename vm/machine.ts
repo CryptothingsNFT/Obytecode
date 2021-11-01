@@ -2,54 +2,18 @@ import {createHash} from "crypto";
 import {Assertions, Gas, Instructions, WideOpcodes} from './ops';
 import READ from "./implementation/READ";
 import {DIGEST_ENCODINGS, REGISTERS} from "./types";
+import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
 
-export type ExecutionOutput = {
-    stack: Array<any>,
-    gas: number,
-    stateChanges?: Record<string, string>,
-    apps?: Array<Record<string, any>>
-}
-export type ExecutionOptions = {
-    debug?: boolean,
-    log?: boolean
-}
-export type InitialExecutionContext = {
-    trigger_unit: string,
-    this_address: string
-}
-export type Machine = {
-    stack: Array<any>,
-    ctx: {
-        trigger_unit: string,
-        this_address: string
-    }
-    regs: Array<any>,
-    memory: Array<any>,
-    userland: Array<any>,
-    apps: Array<Record<string, any>>,
-    labels: Record<string, [number, number]>,
-    map: Record<string | number, any>,
-    stateChanges: Record<string, string>,
-    stackMax: number,
-    usedGas: number,
-    pc: number,
-    push: (val: any)=>void,
-    pop: ()=>any,
-    peek: (n: number)=>any,
-    debug: ()=>void,
-    abort: (str: string)=>{ stack: any; gas: any; stateChanges: any; apps: any, error?: string },
-    load: (code: Array<any>, ctx: {trigger_unit: string, this_address: string})=>void
-}
-
+//The returned function can be used to resume execution after an interruption
 const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts: ExecutionOptions)=>{
     let instruction: number = null;
     let next: any;
     let lhs: any, rhs: any; //Used for multiple opcodes
-    state.regs[REGISTERS.TRIGGER_REGISTRY] = state.ctx.trigger_unit;
-    state.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = state.ctx.this_address;
     if (opts?.log || opts?.debug)
         console.log("Initial memory", state.memory);
-    return ()=> {
+    return (): ExecutionOutput=>{
+        if (state.regs[REGISTERS.INPUT_REGISTRY]) //We just woke up after an interrupt. Let's push the value that was just written to the input registry
+            state.push(state.regs[REGISTERS.INPUT_REGISTRY]);
         while (instruction !== Instructions.NOP && state.pc < state.memory.length) {
             instruction = state.memory[state.pc];
             if (opts?.log)
@@ -170,7 +134,7 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     break;
                 case Instructions.TO_INT: {
                     const head: string = state.pop();
-                    const parsed: number = parseInt(head, state.regs[0] || 10);
+                    const parsed: number = parseInt(head, state.regs[REGISTERS.MODIFIER_REGISTRY] || 10);
                     state.push(BigInt(parsed));
                     break;
                 }
@@ -258,7 +222,11 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                 }
                 //IO
                 case Instructions.READ: {
-                    READ.bind(state)();
+                    const result = READ.bind(state)();
+                    if (result) { //Needs interruption
+                        state.pc+=2;
+                        return result;
+                    }
                     break;
                 }
                 case Instructions.PUSH_APP: {
@@ -281,8 +249,7 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
     }
 }
 
-
-export const makeVm = (opts?: {log?: boolean, debug?: boolean})=>{
+export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
     const vm: Machine = {
         stack: [],
         regs: [],
@@ -294,7 +261,6 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean})=>{
         stateChanges: {},
         stackMax: 128,
         usedGas: 0,
-        ctx: {trigger_unit: undefined, this_address: undefined},
         pc: 0, // program counter
 
         push(val: any): void{
@@ -322,11 +288,14 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean})=>{
         abort(str): { stack: any; gas: any; stateChanges: any; apps: any, error?: string }{
             return {stack: this.stack, gas: this.usedGas, stateChanges: this.stateChanges, apps: this.apps, error: `[VM]${str.startsWith('[') ? str: ' '+str}`};
         },
-        load(code: Array<any>): void{
-            this.memory = code;
-        }
     };
-    const run = makeRun(vm, opts);
-    const load: (code: Array<any>, ctx: InitialExecutionContext) => void = (code: Array<any>, ctx: InitialExecutionContext): void=>vm.load(code, ctx);
-    return {load, run};
+    const run: () => ExecutionOutput = makeRun(vm, opts);
+    const load: (code: Array<any>, ctx: InitialExecutionContext) => void = (code: Array<any>, ctx: InitialExecutionContext): void=>{
+        vm.memory = code;
+        //Set readonly registers
+        vm.regs[REGISTERS.TRIGGER_REGISTRY] = ctx.trigger_unit;
+        vm.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = ctx.this_address;
+    };
+    const write = (data: any)=>vm.regs[REGISTERS.INPUT_REGISTRY] = data;
+    return {load, run, write};
 }

@@ -71,16 +71,6 @@ export const InstructionSet: Record<string, Opcode> = {
         gas: 1,
         code: 15
     },
-    INTERRUPT: { //Stops execution and awaits data from an outside source
-        code: 16,
-        gas: 10,
-        assert(){
-            const type = this.memory[this.pc+1];
-            if (!INTERRUPT_SET.has(type))
-                return this.abort('[OPCODE INTERRUPT] unknown interruption type');
-        },
-        wide: true //SEE INTERRUPT_ARGUMENT
-    },
     EXIT: { //Programs finished cleanly
         gas: 1,
         code: 17

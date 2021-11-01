@@ -46,6 +46,59 @@ export const enum DIGEST_ENCODINGS {
     HEX,
     BASE64
 }
-
+export type VMInterface = {
+    load: (code: Array<any>, ctx: InitialExecutionContext)=>void,
+    write: (data: any)=>void,
+    run: ()=>ExecutionOutput
+}
+export type Asset = {
+    cap: number,
+    exists: boolean
+}
 
 export type PAYLOAD_TYPE = Object;
+
+
+
+
+
+
+
+
+
+export type ExecutionOutput = {
+    stack: Array<any>,
+    gas: number,
+    stateChanges?: Record<string, string>,
+    apps?: Array<Record<string, any>>,
+    interruption?: {
+        type: INTERRUPT_ARGUMENT,
+        payload: Record<string, any>
+    }
+}
+export type ExecutionOptions = {
+    debug?: boolean,
+    log?: boolean
+}
+export type InitialExecutionContext = {
+    trigger_unit: string,
+    this_address: string
+}
+export type Machine = {
+    stack: Array<any>,
+    regs: Array<any>,
+    memory: Array<any>,
+    userland: Array<any>,
+    apps: Array<Record<string, any>>,
+    labels: Record<string, [number, number]>,
+    map: Record<string | number, any>,
+    stateChanges: Record<string, string>,
+    stackMax: number,
+    usedGas: number,
+    pc: number,
+    push: (val: any)=>void,
+    pop: ()=>any,
+    peek: (n: number)=>any,
+    debug: ()=>void,
+    abort: (str: string)=>{ stack: any; gas: any; stateChanges: any; apps: any, error?: string },
+}

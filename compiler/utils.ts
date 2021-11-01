@@ -24,6 +24,4 @@ export const typeVar = (str: string): any=>{
     throw new Error(`Cannot properly type ${str} ${typeof str}`);
 }
 
-export const isBinaryOp = (str: string): boolean=>{
-    return str === '+' || str === '-' || str === '*' || str === '/' || str === 'concat' || str === 'otherwise';
-}
+export const isBinaryOp = (str: string): boolean=>str === '+' || str === '-' || str === '*' || str === '/' || str === 'concat' || str === 'otherwise';
