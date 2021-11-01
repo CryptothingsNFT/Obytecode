@@ -81,8 +81,15 @@ export type ExecutionOptions = {
     log?: boolean
 }
 export type InitialExecutionContext = {
-    trigger_unit: string,
-    this_address: string
+    this_address: string,
+    trigger: {
+        address: string,
+        unit: string,
+        initial_unit: string,
+        data?: Record<string, string>
+        output: Record<string, number>
+        outputs: Record<string, number>
+    }
 }
 export type Machine = {
     stack: Array<any>,

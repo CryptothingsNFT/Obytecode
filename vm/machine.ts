@@ -293,7 +293,7 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
     const load: (code: Array<any>, ctx: InitialExecutionContext) => void = (code: Array<any>, ctx: InitialExecutionContext): void=>{
         vm.memory = code;
         //Set readonly registers
-        vm.regs[REGISTERS.TRIGGER_REGISTRY] = ctx.trigger_unit;
+        vm.regs[REGISTERS.TRIGGER_REGISTRY] = ctx.trigger;
         vm.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = ctx.this_address;
     };
     const write = (data: any)=>vm.regs[REGISTERS.INPUT_REGISTRY] = data;
