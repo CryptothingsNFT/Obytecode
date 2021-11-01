@@ -14,6 +14,10 @@ const initSection: string = `init: "{
         $a = $false OTHERWISE $ret;
         \${'name' || 3} = $ret || 10;
         $nameLast = \${'name' || 3} || \${'name' || 3};
+        if (true == false)
+            bounce("if");
+        else
+            bounce("else");
         bounce($nameLast || this_address || asset['asset'].exists || trigger.address || trigger.unit || mci || timestamp);
     }"`;
 

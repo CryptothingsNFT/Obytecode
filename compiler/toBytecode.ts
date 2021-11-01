@@ -207,6 +207,27 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
                 Instructions.PICK
             );
         }
+        else if (n[0] === 'ifelse'){
+            console.log("ifelse", n);
+            const condition: Array<any> = Array.isArray(n[1])
+                ? toBytecode(n[1])
+                : [Instructions.IMM, n[1]]; //Possible optimization here. The if is a constant value which can be evaluated during compilation
+            const ifBody: Array<any> = toBytecode(n[2]);
+            const elseBody: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]) : [];
+            bytecode.push(
+                ...condition, Instructions.IS_TRUTHY,
+                Instructions.IMM, true,
+                Instructions.SKIP_NEQ, ifBody.length,
+                ...ifBody,
+                ...elseBody
+            )
+        }
+        else if (n[0] === 'comparison' && n[1] === '=='){
+            const op1: Array<any> = Array.isArray(n[2]) ? toBytecode(n[2]) : [Instructions.IMM, n[2]];
+            const op2: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]): [Instructions.IMM, n[3]];
+            bytecode.push(...op1, ...op2, Instructions.EQUAL);
+            return bytecode;
+        }
         else
             throw new Error("[compiler] Unimplemented AST node " + n);
     });

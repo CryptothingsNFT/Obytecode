@@ -1,6 +1,6 @@
 import type {Opcode, PAYLOAD_TYPE} from "./types";
 import is_valid_payload from "./validations/is_valid_payload";
-import {INTERRUPT_SET, READ_ARGUMENT, READ_ONLY_REGISTERS, REGISTER_SET, REGISTERS} from "./types";
+import {READ_ARGUMENT, READ_ONLY_REGISTERS, REGISTER_SET, REGISTERS} from "./types";
 import is_valid_address from "./validations/is_valid_address";
 
 export const InstructionSet: Record<string, Opcode> = {
@@ -119,7 +119,7 @@ export const InstructionSet: Record<string, Opcode> = {
         gas: 1,
         code: 23,
         assert(){
-            const registry = this.memory[this.pc+1];
+            const registry: REGISTERS = this.memory[this.pc+1];
             const head = this.peek(-1);
             if (READ_ONLY_REGISTERS.has(registry))
                 return this.abort("[OPCODE REG] tried to write on a readonly register");
@@ -139,6 +139,10 @@ export const InstructionSet: Record<string, Opcode> = {
     JNE: {  //Jump to the address stored in the jump registry if the two items at the top of the stack are NOT equal
         gas: 2,
         code: 25
+    },
+    IS_FALSY: { //Pushes true to the stack if the head is falsy and false otherwise
+        code: 36,
+        gas: 1,
     },
     IMM: {  //Pushes data into the stack
         gas: 1,

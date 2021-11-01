@@ -5,12 +5,10 @@ import {DIGEST_ENCODINGS, REGISTERS} from "./types";
 import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
 
 //The returned function can be used to resume execution after an interruption
-const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts: ExecutionOptions)=>{
+const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts?: ExecutionOptions)=>{
     let instruction: number = null;
     let next: any;
     let lhs: any, rhs: any; //Used for multiple opcodes
-    if (opts?.log || opts?.debug)
-        console.log("Initial memory", state.memory);
     return (): ExecutionOutput=>{
         if (state.regs[REGISTERS.INPUT_REGISTRY]) //We just woke up after an interrupt. Let's push the value that was just written to the input registry
             state.push(state.regs[REGISTERS.INPUT_REGISTRY]);
@@ -74,7 +72,7 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     else
                         state.pc++;
                     break;
-                case Instructions.JNE:
+                case Instructions.JNE: {
                     rhs = state.pop();
                     lhs = state.pop();
                     if (lhs !== rhs)
@@ -82,6 +80,7 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     else
                         state.pc++;
                     break;
+                }
                 case Instructions.LOAD:
                     state.push(state.userland[next]);
                     break;
@@ -92,12 +91,18 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                 case Instructions.POP_HEAD:
                     state.pop();
                     break;
-                case Instructions.IS_TRUTHY:
-                    const what = state.pop();
+                case Instructions.EQUAL: {
+                    lhs = state.pop();
+                    rhs = state.pop();
+                    state.push(lhs === rhs);
+                    break;
+                }
+                case Instructions.IS_TRUTHY: {
+                    const what: any = state.pop();
                     const isFalsy: boolean = what === undefined || what === null || what === 0 || what === false;
                     state.push(!isFalsy);
                     break;
-
+                }
                 case Instructions.PICK: {
                     const key: string = state.pop();
                     const object: Array<any> | Record<string, any> = state.pop();
@@ -105,13 +110,13 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     break;
                 }
                 case Instructions.SET: {
-                    const key = state.pop();
-                    const value = state.pop();
+                    const key: string = state.pop();
+                    const value: any = state.pop();
                     state.map[key] = value;
                     break;
                 }
                 case Instructions.GET: {
-                    const key = state.pop();
+                    const key:string = state.pop();
                     state.push(state.map[key]);
                     break;
                 }
@@ -297,6 +302,8 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
         vm.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = ctx.this_address;
         vm.regs[REGISTERS.MCI_REGISTRY] = ctx.mci;
         vm.regs[REGISTERS.TIMESTAMP_REGISTRY] = ctx.timestamp;
+        if (opts?.log || opts?.debug)
+            console.log("Initial memory", JSON.stringify(vm.memory));
     };
     const write = (data: any)=>vm.regs[REGISTERS.INPUT_REGISTRY] = data;
     return {load, run, write};
