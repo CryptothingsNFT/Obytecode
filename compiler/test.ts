@@ -1,6 +1,6 @@
 import parse from "./toAST";
 import toBytecode from "./toBytecode";
-import {VM} from "../vm/machine";
+import {makeVm} from "../vm/machine";
 
 const initSection: string = `init: "{
         $foo = 77;
@@ -63,13 +63,14 @@ try{
     const parsed: [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}] = parse(code) as [string, {init?: Array<any>, messages?: Array<any>, getters?: Array<any>, bounce_fees?: Array<any>}];
     const {bounce_fees, init, messages, getters} = parsed[1];
     const initBytecode: Array<any> = toBytecode(init);
-    VM.load(initBytecode);
+    const {load, run} = makeVm();
+    load(initBytecode, {trigger_unit: "TRIGGER_UNIT", this_address: "THIS_ADDRESS"});
     const strippedInit: string = `{${initSection.replaceAll(' ', '').replaceAll('\t', '').replaceAll('\n', '')}}`;
     console.log("Oscript", strippedInit, strippedInit.length);
     console.log('Tape length', initBytecode.length);
 
     console.log("BEGIN EXECUTION:");
-    console.log(VM.interpret({trigger_unit:{hash: "tgrnt", address: 'FROM_ADDRESS', initial_address: "INITIAL_ADDRESS"}, this_address: "MY_ADDRESS"}, {debug: false, log: true}));
+    console.log(run());
     console.log("EXECUTION ENDED");
 } catch (e){
     console.error(e);

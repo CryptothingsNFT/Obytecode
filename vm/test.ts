@@ -1,8 +1,10 @@
 import Routines from "./routines";
 import {Instructions} from "./ops";
-import {VM} from "./machine";
+import {makeVm} from "./machine";
 
-VM.load([
+const {load, run} = makeVm({log: true});
+
+load([
     //this imports a routine called read_data_feed. Importing supports renaming the imported function by passing a second argument
     ...Routines.READ_DATA_FEED({address: "RO7ZAGVJPBOZFH4NMDGZGY4IRILNNEUQ", feed_name: "GBYTE_USD", max_mci: 1000}),
     //Call read_data_feed routine
@@ -19,7 +21,7 @@ VM.load([
     Instructions.IMM, "result",
     //update or create a state var called result with data_feed value + 12. At the end of the execution a stateChanges hashMap is returned with all the state changes
     Instructions.SET_STATE_VAR
-]);
+], {this_address: "MY_ADDRESS", trigger_unit: "TRIGGER_UNIT"});
 
-console.log(VM.interpret({log: true}));
+console.log(run());
 //Logs { stack: [], gas: 1125, stateChanges: { result: '42' }, apps: [] }

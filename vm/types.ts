@@ -6,7 +6,7 @@ export enum REGISTERS {
     ASSET_REGISTRY,
     OPTS_REGISTRY,
     JUMP_REGISTRY,
-
+    INPUT_REGISTRY,
 
     //READONLY
     TRIGGER_REGISTRY,
@@ -29,6 +29,14 @@ export enum READ_ARGUMENT {
     THIS_ADDRESS,
     ASSET
 }
+export enum INTERRUPT_ARGUMENT {
+    DATA_FEED,
+    BALANCE,
+    UNIT,
+    VARIABLE,
+    ASSET
+}
+export const INTERRUPT_SET: Set<number> = new Set(Object.keys(REGISTERS).filter((x: string): boolean=> typeof x === "string").map((key: string): number => REGISTERS[key]));
 export const enum APP_TYPE {
     PAYMENT,
     DATA,

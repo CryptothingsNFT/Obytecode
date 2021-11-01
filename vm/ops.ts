@@ -1,6 +1,6 @@
 import type {Opcode, PAYLOAD_TYPE} from "./types";
 import is_valid_payload from "./validations/is_valid_payload";
-import {READ_ARGUMENT, READ_ONLY_REGISTERS, REGISTER_SET, REGISTERS} from "./types";
+import {INTERRUPT_SET, READ_ARGUMENT, READ_ONLY_REGISTERS, REGISTER_SET, REGISTERS} from "./types";
 import is_valid_address from "./validations/is_valid_address";
 
 export const InstructionSet: Record<string, Opcode> = {
@@ -70,6 +70,16 @@ export const InstructionSet: Record<string, Opcode> = {
     GTE: { //TODO implement
         gas: 1,
         code: 15
+    },
+    INTERRUPT: { //Stops execution and awaits data from an outside source
+        code: 16,
+        gas: 10,
+        assert(){
+            const type = this.memory[this.pc+1];
+            if (!INTERRUPT_SET.has(type))
+                return this.abort('[OPCODE INTERRUPT] unknown interruption type');
+        },
+        wide: true //SEE INTERRUPT_ARGUMENT
     },
     EXIT: { //Programs finished cleanly
         gas: 1,
@@ -209,11 +219,6 @@ export const InstructionSet: Record<string, Opcode> = {
     ABORT: { //Aborts program execution. The head is used as the error reason.
         code: 36,
         gas: 0
-    },
-    INTERRUPT: { //TODO implement Interrupts execution allowing external agents to pass external data to the VM
-        code: 37,
-        gas: 1,
-        wide: true //interruption type
     },
     VAR: {  //pops head into a variable
         code: 38,
