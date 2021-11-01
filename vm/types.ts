@@ -10,7 +10,8 @@ export enum REGISTERS {
 
     //READONLY
     TRIGGER_REGISTRY,
-    THIS_ADDRESS_REGISTRY
+    THIS_ADDRESS_REGISTRY,
+    MCI_REGISTRY,
 }
 export const READ_ONLY_REGISTERS: Set<number> = new Set([REGISTERS.TRIGGER_REGISTRY, REGISTERS.THIS_ADDRESS_REGISTRY]);
 export const REGISTER_SET: Set<number> = new Set(Object.keys(REGISTERS).filter((x: string): boolean=> typeof x === "string").map((key: string): number => REGISTERS[key]));
@@ -27,7 +28,8 @@ export enum READ_ARGUMENT {
     MAP,
     VARIABLE,
     THIS_ADDRESS,
-    ASSET
+    ASSET,
+    MCI,
 }
 export enum INTERRUPT_ARGUMENT {
     DATA_FEED,
@@ -82,6 +84,7 @@ export type ExecutionOptions = {
 }
 export type InitialExecutionContext = {
     this_address: string,
+    mci: number,
     trigger: {
         address: string,
         unit: string,

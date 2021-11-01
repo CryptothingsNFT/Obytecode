@@ -156,6 +156,10 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
                 Instructions.PICK
             );
         }
+        else if (n[0] === 'mci'){
+            bytecode.push(Instructions.READ, READ_ARGUMENT.MCI);
+            return bytecode;
+        }
         else if (n[0] === 'balance'){
             if (n[2] === null) {
                 n[2] = 'base';
@@ -200,7 +204,7 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
             );
         }
         else
-            throw new Error("[compiler] Unimplemented AST node" + n);
+            throw new Error("[compiler] Unimplemented AST node " + n);
     });
     //Reset for next usage
     setImmediate(()=>ctx = {node: -1, currentMemorySlot: 0, address2var: {}, var2address: {}, varReplacement: {}});

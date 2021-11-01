@@ -23,7 +23,7 @@ vm.load([
     Instructions.IMM, "result",
     //update or create a state var called result with data_feed value + 12. At the end of the execution a stateChanges hashMap is returned with all the state changes
     Instructions.SET_STATE_VAR
-], {this_address: "MY_ADDRESS", trigger: {unit: "TRIGGER_UNIT", initial_unit: "TRIGGER_UNIT", address: "TRIGGER_ADDRESS", output: {base: 3000}, outputs: {base: 3000}}});
+], {this_address: "MY_ADDRESS", mci: 1, trigger: {unit: "TRIGGER_UNIT", initial_unit: "TRIGGER_UNIT", address: "TRIGGER_ADDRESS", output: {base: 3000}, outputs: {base: 3000}}});
 
 console.log(await hostRun(vm));
 //Logs { stack: [], gas: 1125, stateChanges: { result: '42' }, apps: [] }
