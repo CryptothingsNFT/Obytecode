@@ -18,6 +18,9 @@ export default function() { //Returns an interruption
     else if (what === READ_ARGUMENT.MCI)
         this.push(this.regs[REGISTERS.MCI_REGISTRY]);
 
+    else if (what === READ_ARGUMENT.TIMESTAMP)
+        this.push(this.regs[REGISTERS.TIMESTAMP_REGISTRY]);
+
     //These will cause an interruption until the required data is provided
     else if (what === READ_ARGUMENT.BALANCE) {
         const address: string = this.regs[REGISTERS.ADDRESS_REGISTRY1];

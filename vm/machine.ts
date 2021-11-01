@@ -296,6 +296,7 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
         vm.regs[REGISTERS.TRIGGER_REGISTRY] = ctx.trigger;
         vm.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = ctx.this_address;
         vm.regs[REGISTERS.MCI_REGISTRY] = ctx.mci;
+        vm.regs[REGISTERS.TIMESTAMP_REGISTRY] = ctx.timestamp;
     };
     const write = (data: any)=>vm.regs[REGISTERS.INPUT_REGISTRY] = data;
     return {load, run, write};

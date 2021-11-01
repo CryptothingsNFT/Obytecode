@@ -14,7 +14,7 @@ const initSection: string = `init: "{
         $a = $false OTHERWISE $ret;
         \${'name' || 3} = $ret || 10;
         $nameLast = \${'name' || 3} || \${'name' || 3};
-        bounce($nameLast || this_address || asset['asset'].exists || trigger.address || trigger.unit || mci);
+        bounce($nameLast || this_address || asset['asset'].exists || trigger.address || trigger.unit || mci || timestamp);
     }"`;
 
 const code: string = `{
@@ -71,7 +71,7 @@ const vm: VMInterface = makeVm();
 
 
 
-vm.load(initBytecode, {this_address: "THIS_ADDRESS", mci: 1, trigger: {unit: "TRIGGER_UNIT", initial_unit: "TRIGGER_UNIT", address: 'TRIGGER_ADDRESS', output: {base: 3000}, outputs: {base: 3000}}});
+vm.load(initBytecode, {this_address: "THIS_ADDRESS", mci: 1, timestamp: Math.trunc(Date.now() / 1000), trigger: {unit: "TRIGGER_UNIT", initial_unit: "TRIGGER_UNIT", address: 'TRIGGER_ADDRESS', output: {base: 3000}, outputs: {base: 3000}}});
 const strippedInit: string = `{${initSection.replaceAll(' ', '').replaceAll('\t', '').replaceAll('\n', '')}}`;
 console.log("Oscript", strippedInit, strippedInit.length);
 console.log('Tape length', initBytecode.length);

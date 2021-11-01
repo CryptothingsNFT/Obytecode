@@ -12,6 +12,7 @@ export enum REGISTERS {
     TRIGGER_REGISTRY,
     THIS_ADDRESS_REGISTRY,
     MCI_REGISTRY,
+    TIMESTAMP_REGISTRY,
 }
 export const READ_ONLY_REGISTERS: Set<number> = new Set([REGISTERS.TRIGGER_REGISTRY, REGISTERS.THIS_ADDRESS_REGISTRY]);
 export const REGISTER_SET: Set<number> = new Set(Object.keys(REGISTERS).filter((x: string): boolean=> typeof x === "string").map((key: string): number => REGISTERS[key]));
@@ -30,6 +31,7 @@ export enum READ_ARGUMENT {
     THIS_ADDRESS,
     ASSET,
     MCI,
+    TIMESTAMP,
 }
 export enum INTERRUPT_ARGUMENT {
     DATA_FEED,
@@ -83,6 +85,7 @@ export type ExecutionOptions = {
     log?: boolean
 }
 export type InitialExecutionContext = {
+    timestamp: number;
     this_address: string,
     mci: number,
     trigger: {

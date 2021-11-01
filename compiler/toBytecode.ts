@@ -160,6 +160,10 @@ const toBytecode = (ast, bytecode: Array<any> = []): Array<any>=>{
             bytecode.push(Instructions.READ, READ_ARGUMENT.MCI);
             return bytecode;
         }
+        else if (n[0] === 'timestamp'){
+            bytecode.push(Instructions.READ, READ_ARGUMENT.TIMESTAMP);
+            return bytecode;
+        }
         else if (n[0] === 'balance'){
             if (n[2] === null) {
                 n[2] = 'base';
