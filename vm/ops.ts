@@ -23,53 +23,58 @@ export const InstructionSet: Record<string, Opcode> = {
         gas: 1,
         code: 3
     },
-    POW: {  ////TODO IMPLEMENT If the stack ends with [..., 10, 2] It replaces them with 100
+    POW: {  //If the stack ends with [..., 10, 2] It replaces them with 100
         gas: 2,
         code: 4
     },
-    EQUAL: {    ////TODO IMPLEMENT If the two items at the top of the stack are strictly equal then true is pushed into the stack. Otherwise false is pushed.
+    EQUAL: {  //If the two items at the top of the stack are strictly equal then true is pushed into the stack. Otherwise false is pushed.
         gas: 1,
         code: 5
     },
-    LIKE: { ////TODO IMPLEMENT If the two items at the top of the stack are roughly equal (==) then true is pushed into the stack. Otherwise false is pushed.
+    LIKE: { //TODO IMPLEMENT If the two items at the top of the stack are roughly equal (==) then true is pushed into the stack. Otherwise false is pushed.
         gas: 1,
         code: 6
     },
-    NEQUAL: {   ////TODO IMPLEMENT If the two items at the top of the stack are strictly not equal then true is pushed into the stack. Otherwise false is pushed.
+    NEQUAL: {   //TODO IMPLEMENT If the two items at the top of the stack are strictly not equal then true is pushed into the stack. Otherwise false is pushed.
         gas: 1,
         code: 7
     },
-    NLIKE: {    ////TODO IMPLEMENT If the two items at the top of the stack are roughly not equal (!=) then true is pushed into the stack. Otherwise false is pushed.
+    NLIKE: {    //TODO IMPLEMENT If the two items at the top of the stack are roughly not equal (!=) then true is pushed into the stack. Otherwise false is pushed.
         gas: 1,
         code: 8
     },
-    OR: {   ////TODO IMPLEMENT If the stack ends with [..., item1, item2] both items are removed from the stack and the result of (item1 || item2) is pushed.
+    OR: {   //TODO IMPLEMENT If the stack ends with [..., item1, item2] both items are removed from the stack and the result of (item1 || item2) is pushed.
         gas: 1,
         code: 9
     },
-    AND: {  ////TODO IMPLEMENT If the stack ends with [..., item1, item2] both items are removed from the stack and the result of (item1 && item2) is pushed.
+    AND: {  //TODO IMPLEMENT If the stack ends with [..., item1, item2] both items are removed from the stack and the result of (item1 && item2) is pushed.
         gas: 1,
         code: 10
     },
-    XOR: { //TODO IMPLEMENT
+    XOR: {
         gas: 2,
         code: 11
     },
-    LT: { //TODO IMPLEMENT
+    LT: {
         gas: 1,
         code: 12
     },
-    LTE: { //TODO IMPLEMENT
+    LTE: {
         gas: 1,
         code: 13
     },
-    GT: { //TODO implement
+    GT: {
         gas: 1,
         code: 14
     },
-    GTE: { //TODO implement
+    GTE: {
         gas: 1,
         code: 15
+    },
+    UNREG: { //reads register data into the stack
+        gas: 1,
+        code: 16,
+        wide: true //Which register to read
     },
     EXIT: { //Programs finished cleanly
         gas: 1,
@@ -92,18 +97,17 @@ export const InstructionSet: Record<string, Opcode> = {
     CALL: { //Moves PC to a label
         gas: 1,
         code: 20,
-        assert(){
-            if (typeof this.memory[this.pc+1] !== 'string')
-                return this.abort(`[OPCODE CALL] tried to call a non-string label ${this.memory[this.pc+1]}`);
-        },
         wide: true //Contains the label to jump to
     },
-    TRUNCATE: { //Truncates a number to an integer
+    TRUNC: { //Truncates a number to an integer or an array to the given length
         gas: 2,
         assert(){
-            const number = this.peek(-1);
-            if (typeof number !== 'number')
-                return this.abort(`[OPCODE TRUNCATE] the head is not of type number. It is ${typeof number}`);
+            const length: number = this.peek(-1);
+            if (typeof length !== 'number')
+                return this.abort(`[OPCODE TRUNC] the head is not of type number. It is ${typeof length}`);
+            const arg: number | Array<any> = this.peek(-2);
+            if (typeof arg !== 'number' && !Array.isArray(arg))
+                return this.abort(`[OPCODE TRUNC] the subhead is not of type number nor array. It is ${typeof arg}`);
         },
         code: 21
     },
@@ -141,7 +145,7 @@ export const InstructionSet: Record<string, Opcode> = {
         code: 25
     },
     IS_FALSY: { //Pushes true to the stack if the head is falsy and false otherwise
-        code: 36,
+        code: 26,
         gas: 1,
     },
     IMM: {  //Pushes data into the stack
@@ -160,7 +164,7 @@ export const InstructionSet: Record<string, Opcode> = {
                 if (typeof operand1 !== 'number' && typeof operand1 !== 'bigint')
                     return this.abort(`[OPCODE ADD] the head must be of type number, bigint or string. It is ${typeof operand1}`);
                 if (typeof operand2 !== 'number' && typeof operand2 !== 'bigint')
-                    return this.abort(`[OPCODE ADD] the head must be of type number, bigint or string. It is ${typeof operand2}`);
+                    return this.abort(`[OPCODE ADD] the subhead must be of type number, bigint or string. It is ${typeof operand2}`);
             }
         },
         gas: 1
@@ -214,6 +218,11 @@ export const InstructionSet: Record<string, Opcode> = {
         code: 36,
         gas: 0
     },
+    INC: { //Increments a register
+        code: 37,
+        gas: 1,
+        wide: true
+    },
     VAR: {  //pops head into a variable
         code: 38,
         gas: 3,
@@ -238,7 +247,7 @@ export const InstructionSet: Record<string, Opcode> = {
         code: 42,
         assert(){
             if (this.stack.length === 0)
-                return this.abort(["[OPCODE POP_HEAD] the stack is empty"]);
+                return this.abort("[OPCODE POP_HEAD] the stack is empty");
         },
         gas: 1
     },
@@ -247,10 +256,11 @@ export const InstructionSet: Record<string, Opcode> = {
         assert(){
             const key = this.peek(-1);
             const object = this.peek(-2);
+            console.log("Picking", key, 'from', object);
             if (typeof object !== 'object')
-                return this.abort(`PICK OPCODE: target should be object or array`);
+                return this.abort(`[OPCODE PICK] target should be object or array`);
             if (typeof key !== 'number' && typeof key !== 'string')
-                return this.abort(`PICK OPCODE: key should be string or number`);
+                return this.abort(`[OPCODE PICK] key should be string or number`);
         },
         gas: 1
     },
@@ -260,10 +270,23 @@ export const InstructionSet: Record<string, Opcode> = {
             const key = this.peek(-2);
             const object = this.peek(-3);
             if (typeof object !== 'object')
-                return this.abort(`DEF OPCODE: target should be object or array`);
+                return this.abort(`[OPCODE DEF] target should be object or array`);
             if (typeof key !== 'number' && typeof key !== 'string')
-                return this.abort(`DEF OPCODE: key should be string or number`);
+                return this.abort(`[OPCODE DEF] key should be string or number`);
         },
+        gas: 1
+    },
+    LENGTH: { //Pushes the length of the array or string into the stack
+        code: 45,
+        assert(){
+            const argument: Array<any> | string = this.peek(-1);
+            if (typeof argument !== 'string' && !Array.isArray(argument))
+                return this.abort("[OPCODE LENGTH] the head is not an array nor a string");
+        },
+        gas: 1
+    },
+    SKIP: { //Unconditionally shifts the PC
+        code: 46,
         gas: 1
     },
     DBG: {

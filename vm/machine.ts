@@ -3,6 +3,7 @@ import {Assertions, Gas, Instructions, WideOpcodes} from './ops';
 import READ from "./implementation/READ";
 import {DIGEST_ENCODINGS, REGISTERS} from "./types";
 import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
+import {bytecode2ASM} from "../compiler/utils";
 
 //The returned function can be used to resume execution after an interruption
 const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts?: ExecutionOptions)=>{
@@ -64,6 +65,12 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                     lhs = state.pop();
                     state.push(lhs / rhs | 0); // integer division, rounds towards 0 (unlike Math.floor)
                     break;
+                case Instructions.POW: {
+                    const exponent: number = state.pop();
+                    const base: number = state.pop();
+                    state.push(Math.pow(base, exponent));
+                    break;
+                }
                 case Instructions.JEQ:
                     rhs = state.pop();
                     lhs = state.pop();
@@ -157,6 +164,10 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                     state.push(state.map[key]);
                     break;
                 }
+                case Instructions.SKIP: {
+                    state.pc+= next;
+                    break;
+                }
                 case Instructions.SKIP_EQ: {
                     const cmp1: any = state.pop();
                     const cmp2: any = state.pop();
@@ -174,6 +185,9 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                 case Instructions.REG:
                     state.regs[next] = state.pop();
                     break;
+                case Instructions.UNREG:
+                    state.push(state.regs[next]);
+                    break;
                 case Instructions.TO_INT: {
                     const head: string = state.pop();
                     const parsed: number = parseInt(head, state.regs[REGISTERS.MODIFIER_REGISTRY] || 10);
@@ -186,9 +200,18 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                     state.push(parsed);
                     break;
                 }
-                case Instructions.TRUNCATE: {
-                    const head: number = state.pop();
-                    state.push(Math.trunc(head));
+                case Instructions.LENGTH: {
+                    const arg: Array<any> | string = state.peek(-1);
+                    state.push(arg.length);
+                    break;
+                }
+                case Instructions.TRUNC: {
+                    const size: number = state.pop();
+                    const argument: number | Array<any> = state.pop();
+                    if (typeof argument === 'number')
+                        state.push(parseFloat(argument.toFixed(size)));
+                    else
+                        state.push((argument as Array<any>).slice(0, size));
                     break;
                 }
                 case Instructions.TO_STRING: {
@@ -220,12 +243,27 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                 case Instructions.LABEL: {
                     const initialPC: number = state.pc + 2;
                     //TODO introduce support for nested labels
-                    const endPC: number = state.memory.findIndex((item, index) => index > initialPC && item === Instructions.END_LABEL);
-                    if (endPC === -1)
+                    let endPC: number;
+                    let openCounter = 0;
+                    for (let i = initialPC; i<state.memory.length;++i){
+                        if (state.memory[i] === Instructions.LABEL)
+                            openCounter++;
+                        if (state.memory[i] === Instructions.END_LABEL) {
+                            openCounter--;
+                            if (openCounter === -1)
+                                endPC = i;
+                        }
+                    }
+                    if (endPC === undefined)
                         return state.abort("Unclosed label");
                     state.labels[next] = [initialPC, endPC];
                     state.pc = endPC; //Skip the END_LABEL, the NOP and the IJMP altogether
                     state.memory[endPC] = Instructions.IJMP; //Replace LABEL_END with IJMP
+                    break;
+                }
+                case Instructions.INC: {
+                    const register: REGISTERS = next;
+                    state.regs[register]++;
                     break;
                 }
                 case Instructions.CALL: {
@@ -340,7 +378,7 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
         vm.regs[REGISTERS.MCI_REGISTRY] = ctx.mci;
         vm.regs[REGISTERS.TIMESTAMP_REGISTRY] = ctx.timestamp;
         if (opts?.log || opts?.debug)
-            console.log("Initial memory", JSON.stringify(vm.memory));
+            console.log("Initial memory", JSON.stringify(bytecode2ASM(vm.memory)));
     };
     const write = (data: any)=>vm.regs[REGISTERS.INPUT_REGISTRY] = data;
     return {load, run, write};
