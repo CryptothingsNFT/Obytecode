@@ -4,9 +4,10 @@ import READ from "./implementation/READ";
 import {DIGEST_ENCODINGS, REGISTERS} from "./types";
 import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
 import {bytecode2ASM} from "../compiler/utils";
+import {deserialize, serialize} from "v8";
 
 //The returned function can be used to resume execution after an interruption
-const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts?: ExecutionOptions)=>{
+const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts: ExecutionOptions = {})=>{
     let instruction: number = null;
     let next: any;
     let lhs: any, rhs: any; //Used for multiple opcodes
@@ -15,8 +16,6 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
             state.push(state.regs[REGISTERS.INPUT_REGISTRY]);
         while (instruction !== Instructions.NOP && state.pc < state.memory.length) {
             instruction = state.memory[state.pc];
-            if (opts?.log)
-                console.log("Evaluating", Object.keys(Instructions).find(x => Instructions[x] === instruction), WideOpcodes.has(instruction) ? next : undefined);
             if (Assertions[instruction]) {
                 const errored = Assertions[instruction].bind(state)();
                 if (errored)
@@ -28,6 +27,8 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                 next = state.memory[state.pc + 1];
             else
                 next = null;
+            if (opts?.log)
+                console.log("Evaluating", Object.keys(Instructions).find(x => Instructions[x] === instruction), WideOpcodes.has(instruction) ? next : undefined);
             if (opts?.debug)
                 state.debug();
 
@@ -48,7 +49,7 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                 case Instructions.ADD:
                     rhs = state.pop();
                     lhs = state.pop();
-                    state.push(lhs + rhs);
+                    state.push(rhs + lhs);
                     break;
                 case Instructions.SUB:
                     rhs = state.pop();
@@ -88,11 +89,63 @@ const makeRun: (state: Machine, opts?: ExecutionOptions)=>()=>ExecutionOutput = 
                         state.pc++;
                     break;
                 }
+                case Instructions.MAP: {
+                    const usesIndex = state.pop();
+                    const truncateAt: number = state.pop();
+                    const array: Array<any> = state.pop();
+                    const VM = makeVm({log: true});
+                    const [fnStart, fnEnd] = state.labels[next];
+                    const fnCode = state.memory.slice(fnStart, fnEnd);
+                    const finalArray = truncateAt ? array.slice(0, truncateAt) : array;
+                    //Loop unrolling to save gas from jumps
+                    const vmCode: Array<any> = [Instructions.IMM, finalArray, ...Array.from({ length: finalArray.length }, (e, i) => [
+                        Instructions.DUP_HEAD,
+                        Instructions.IMM, i,
+                        Instructions.PICK,
+                        ...(usesIndex ? [Instructions.IMM, i, Instructions.SWAP] : []),
+                        ...fnCode,
+                        Instructions.IMM, i,
+                        Instructions.SWAP, Instructions.DEF
+                    ]).flat()];
+                    // @ts-ignore
+                    VM.load(vmCode);
+                    //References
+                    VM.vm.regs = state.regs;
+                    VM.vm.userland = state.userland;
+                    VM.vm.labels = state.labels;
+                    VM.vm.apps = state.apps;
+                    VM.vm.stateChanges = state.stateChanges;
+                    VM.vm.map = state.map;
+                    VM.vm.stack = state.stack;
+                    //TODO pass interruptions to the real host
+                    let result;
+                    do {
+                        result = VM.run();
+                        if (result.interruption) {
+                            VM.vm.pc++;
+                            return result;
+                        }
+                    } while (result.interruption)
+                    state.usedGas += VM.vm.usedGas;
+                    break;
+                }
                 case Instructions.LOAD:
-                    state.push(state.userland[next]);
+                    if (Array.isArray(state.userland[next]))
+                        state.push([...state.userland[next]]);
+                    else if (typeof state.userland[next] === 'object')
+                        state.push({...state.userland[next]});
+                    else
+                        state.push(state.userland[next]);
                     break;
                 case Instructions.MEM: {
                     state.userland[next] = state.pop();
+                    break;
+                }
+                case Instructions.PACK: {
+                    const head = state.pop();
+                    const container = Array.isArray(state.peek(-1)) ? state.pop() : [state.pop()];
+                    container.push(head);
+                    state.push(container);
                     break;
                 }
                 case Instructions.POP_HEAD:
@@ -373,13 +426,15 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
     const load: (code: Array<any>, ctx: InitialExecutionContext) => void = (code: Array<any>, ctx: InitialExecutionContext): void=>{
         vm.memory = code;
         //Set readonly registers
-        vm.regs[REGISTERS.TRIGGER_REGISTRY] = ctx.trigger;
-        vm.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = ctx.this_address;
-        vm.regs[REGISTERS.MCI_REGISTRY] = ctx.mci;
-        vm.regs[REGISTERS.TIMESTAMP_REGISTRY] = ctx.timestamp;
+        if (ctx) { //Only if we are not on a nested VM. Otherwise these are inherited
+            vm.regs[REGISTERS.TRIGGER_REGISTRY] = ctx.trigger;
+            vm.regs[REGISTERS.THIS_ADDRESS_REGISTRY] = ctx.this_address;
+            vm.regs[REGISTERS.MCI_REGISTRY] = ctx.mci;
+            vm.regs[REGISTERS.TIMESTAMP_REGISTRY] = ctx.timestamp;
+        }
         if (opts?.log || opts?.debug)
             console.log("Initial memory", JSON.stringify(bytecode2ASM(vm.memory)));
     };
     const write = (data: any)=>vm.regs[REGISTERS.INPUT_REGISTRY] = data;
-    return {load, run, write};
+    return {load, run, write, vm};
 }

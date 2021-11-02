@@ -1,4 +1,4 @@
-import {Instructions} from "../vm/ops";
+import {Instructions, WideOpcodes} from "../vm/ops";
 import {bytecode2ASM, isBinaryOp, replaceDeep, typeVar} from "./utils";
 import {READ_ARGUMENT, REGISTERS} from "../vm/types";
 
@@ -15,6 +15,37 @@ let ctx: CTX = {
     functionCode: []
 }
 
+const hoistFns = (bytecode: Array<any>, extracted = []): Array<any>=>{
+    let fnStart;
+    let fnCount = 0;
+    let i = 0;
+    while (i<bytecode.length){
+        if (bytecode[i] === Instructions.LABEL) {
+            fnStart = i;
+            fnCount++;
+        }
+        else if (bytecode[i] === Instructions.END_LABEL) {
+            const fnLength = i-fnStart+2;
+            extracted.push(...bytecode.splice(fnStart, fnLength)); //Store function and delete it from bytecode
+            i = 0;
+            continue;
+        }
+        if (WideOpcodes.has(bytecode[i]))
+            i++;
+        i++;
+    }
+    if (fnCount > extracted.length)
+        return hoistFns([...extracted, ...bytecode], extracted);
+    return [...extracted, ...bytecode];
+}
+
+const isFnKnown = (body: Array<any>): boolean=>{
+    const key: string = JSON.stringify(body);
+    if (ctx.functions[key] !== undefined)
+        return true;
+    return false;
+}
+
 const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=>{
     if (!Array.isArray(ast[0]))
         ast = [ast];
@@ -24,7 +55,7 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             return toBytecode(n[1], bytecode);
         else if (n[0] === "local_var") {
             const varname = Array.isArray(n[1]) ? toBytecode(n[1]) : [n[1]];
-            const isIMMNeeded = !Array.isArray(n[1]);
+            const isIMMNeeded: boolean = !Array.isArray(n[1]);
             // @ts-ignore
             if (ctx.var2address[varname] !== undefined) //The variable name was known at compile time TODO MIGHT BE BUGGY
                 { // @ts-ignore
@@ -99,11 +130,18 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
                         ctx.currentMemorySlot--;
                         ctx.var2address[varname] = ctx.currentMemorySlot;
                         ctx.address2var[ctx.currentMemorySlot] = varname;
-                        bytecode.push(
-                            Instructions.IMM, [],
-                            Instructions.MEM, ctx.var2address[varname],
-                            ...toBytecode(n[2], [], {array: varname})
+                        //Trivial arrays are homogeneous, compact and of trivial types
+                        const isTrivialArray: boolean = n[2][1].map(x=>typeVar(x)).every((x, i, arr)=>typeof x === typeof arr[0] && !Array.isArray(x) && typeof x !== 'object');
+                        if (isTrivialArray)
+                            bytecode.push(Instructions.IMM, n[2][1].map(x=>typeVar(x)), Instructions.MEM, ctx.var2address[varname]);
+                        else {
+                            bytecode.push(
+                                Instructions.IMM, [],
+                                Instructions.MEM, ctx.var2address[varname],
+                                ...toBytecode(n[2], [], {array: varname}),
+                                Instructions.MEM, ctx.var2address[varname],
                             );
+                        }
                         ctx.currentMemorySlot++;
                         return bytecode;
                     }
@@ -131,7 +169,6 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
                     Instructions.DEF
                 );
             });
-            bytecode.push(Instructions.POP_HEAD); //Delete the object from the head (will persist in memory)
             return bytecode;
         }
         else if (n[0] === "with_selectors") {
@@ -157,9 +194,16 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
         }
         else if (n[0] === "func_declaration"){
             n[1].forEach(x=>n[2] = replaceDeep(n[2], ['local_var', x], ['bytecode', []]));
-            bytecode.push(Instructions.LABEL, ctx.currentFn, ...toBytecode(n[2], []), Instructions.END_LABEL, Instructions.NOP);
-            ctx.functions[JSON.stringify(bytecode)] = ctx.currentFn;
-            return bytecode;
+            const fnInnerBody: Array<any> = toBytecode(n[2], []);
+            if (!isFnKnown(fnInnerBody)) { //Only emit bytecode if the function is unknown
+                const fnBody: Array<any> = [Instructions.LABEL, ctx.currentFn, ...fnInnerBody, Instructions.END_LABEL, Instructions.NOP];
+                bytecode.push(...fnBody);
+                const fnKey: string = JSON.stringify(fnInnerBody);
+                ctx.functions[fnKey] = ctx.currentFn;
+                ctx.currentFn++;
+                return bytecode
+            }
+            return [];
         }
         else if (n[0] === "+" || n[0] === "-" || n[0] === '*' || n[0] === '/' || n[0] === '^' || n[0] === 'concat' || n[0] === 'otherwise'){
             const op1 = Array.isArray(n[1]) ? [...toBytecode(n[1])] : [Instructions.IMM, typeVar(n[1])];
@@ -287,60 +331,22 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
         else if (n[0] === 'map'){ //TODO if array is not too long we should use loop unrolling instead to save ops
             const array: Array<any> = toBytecode(n[1]);
             const fn: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]) : n[3][1]; //Else is local var
-            if (Array.isArray(n[3])) //Declare the callback first
+            const innerBody: Array<any> = toBytecode(n[3][2]);
+            if (Array.isArray(n[3])) //Declare the callback first (empty if the function has been deduped)
                 bytecode.push(...fn);
             const maxLength: number = typeVar(n[2]);
             const usesIndex: boolean = n?.[3]?.[1]?.length === 2; //CB has one argument
 
             bytecode.push(
                 ...array,
-                Instructions.DUP_HEAD,
-                Instructions.REG, REGISTERS.GENERAL_REGISTRY2
-            ); //Load the array into the stack [array, array]
 
-            bytecode.push(
-                Instructions.LENGTH, //[array, length]
-                Instructions.DUP_HEAD,//[array, length, length]
-                Instructions.IMM, maxLength, //[array, length, length, maxlength]
-                Instructions.GTE, //[array, length, l>=ml]
-                Instructions.IMM, true, //[array, length, l=>ml, true]
-                Instructions.SKIP_NEQ, 13, //[array, length]
-                    //True length is higher than maxLength. The array must be truncated
-                    Instructions.UNREG, REGISTERS.GENERAL_REGISTRY2, // [array, length, array]
-                    Instructions.IMM, maxLength, //[array, length, array, maxLength]
-                    Instructions.TRUNC, //[array, length, arrayTrunc] the array has been truncated to maxLength
-                    Instructions.REG, REGISTERS.GENERAL_REGISTRY2, //[array, length](not necessary since a reference is being used)
-                    Instructions.REG, REGISTERS.GENERAL_REGISTRY3, //[array]
-                    Instructions.DUP_HEAD,
-                    Instructions.SKIP, 9,
-                Instructions.REG, REGISTERS.GENERAL_REGISTRY3, //[array] Length is stored in GR3
-                Instructions.POP_HEAD, //[]
-                Instructions.UNREG, REGISTERS.GENERAL_REGISTRY2,//[truncArr]
-                Instructions.DUP_HEAD, //[truncArr, truncArr]
-                Instructions.UNREG, REGISTERS.GENERAL_REGISTRY1, //[truncArr, truncArr, 0]
-                //Last SKIP lands here
                 Instructions.IMM, 0,
-                Instructions.DUP_HEAD,
-                Instructions.REG, REGISTERS.GENERAL_REGISTRY1,
-            ); //Set the loop counter to 0 [array, array]
-            //Stack has [arrayTrunc, arrayTrunc, index] This is the for loop boy
-            bytecode.push(
-                Instructions.PICK, //[array, picked]
-                ...(usesIndex ? [Instructions.UNREG, REGISTERS.GENERAL_REGISTRY1, Instructions.SWAP] : []),
-                Instructions.CALL, ctx.functions[JSON.stringify(fn)],//Call the cb [array, mapped]
-                Instructions.REG, REGISTERS.GENERAL_REGISTRY2, //[array]
-                Instructions.DUP_HEAD, //[array, array]
-                Instructions.UNREG, REGISTERS.GENERAL_REGISTRY1, //[array, array, index]
-                Instructions.UNREG, REGISTERS.GENERAL_REGISTRY2, //[array, array, index, mapped]
-                Instructions.DEF, //[array, array]
+                Instructions.REG, REGISTERS.OPTS_REGISTRY,
+                Instructions.IMM, maxLength,
+                Instructions.IMM, usesIndex,
 
-                Instructions.INC, REGISTERS.GENERAL_REGISTRY1,
-                Instructions.UNREG, REGISTERS.GENERAL_REGISTRY1, //[array, array, index]
-                Instructions.DUP_HEAD, //[array, array, index, index]
-                Instructions.IMM, maxLength, //[array, array, index, index, max]
-                Instructions.SKIP_NEQ, (usesIndex ? -23 : -20) //[array, array, current]
-            );
-            bytecode.push(Instructions.POP_HEAD, Instructions.POP_HEAD); // [array] delete index and array copy
+                Instructions.MAP, ctx.functions[JSON.stringify(innerBody)],
+            ); //Load the array into the stack [array, array]
             return bytecode;
         }
         else if (n[0] === 'bytecode')
@@ -349,8 +355,12 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             throw new Error("[compiler] Unimplemented AST node " + n);
     });
     //Reset for next usage
-    setImmediate(()=>ctx = { functionCode: [], currentFn: 0, functions: {}, node: -1, currentMemorySlot: 0, address2var: {}, var2address: {}, varReplacement: {}});
     return bytecode;
 }
 
-export default toBytecode;
+export default (ast: Array<any>)=>{
+    const raw: Array<any> = toBytecode(ast);
+    const processed: Array<any> = hoistFns(raw);
+    setImmediate(()=>ctx = { functionCode: [], currentFn: 0, functions: {}, node: -1, currentMemorySlot: 0, address2var: {}, var2address: {}, varReplacement: {}});
+    return processed;
+};

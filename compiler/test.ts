@@ -5,20 +5,13 @@ import {run as hostRun} from "../vm/host";
 import type {VMInterface} from "../vm/types";
 
 const initSection: string = `init: "{
-        $foo = 77;
-        $bar = $foo;
-        $baz = $bar * $foo;
-        $biz = $baz - 100 + 7;
-        $ret = "abn" || "abn";
-        $false = false;
-        $a = $false OTHERWISE $ret;
-        \${'name' || 3} = $ret || 10;
-        $nameLast = \${'name' || 3} || \${'name' || 3};
-        if (2 != 2)
-            bounce("if");
-        else
-            bounce("else");
-        bounce($nameLast || this_address || asset['asset'].exists || trigger.address || trigger.unit || mci || timestamp);
+        $arr = [this_address, trigger.address];
+        $arrb = ["a", "b", "c"];
+        $arr1 = map($arr, 2, ($x, $i) => $x || $i);
+        $arr2 = map($arrb, 2, ($x, $i) => $x || $i);
+        $arr3 = map($arr2, 2, ($x, $i) => $x || $i);
+        $arr4 = map($arr, 2, ($x, $i) => $x || $i);
+        bounce($arr4);
     }"`;
 
 const code: string = `{

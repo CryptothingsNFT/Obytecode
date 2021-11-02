@@ -20,7 +20,7 @@ const isJSON = (str: string): boolean=>{
     return true;
 }
 
-export const typeVar = (str: string): any=>{
+export const typeVar = (str: any): any=>{
     if (isNumeric(str))
         return parseFloat(str);
     if (str === 'true' || str === 'false')
@@ -32,7 +32,7 @@ export const typeVar = (str: string): any=>{
     if (typeof str === 'boolean' || typeof str === 'string' || typeof str === 'number')
         return str;
 
-    throw new Error(`Cannot properly type ${str} ${typeof str}`);
+    return str;
 }
 
 export const isBinaryOp = (str: string): boolean=>str === '+' || str === '-' || str === '*' || str === '/' || str === 'concat' || str === 'otherwise';

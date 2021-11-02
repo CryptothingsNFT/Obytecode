@@ -56,7 +56,8 @@ export const enum DIGEST_ENCODINGS {
 export type VMInterface = {
     load: (code: Array<any>, ctx: InitialExecutionContext)=>void,
     write: (data: any)=>void,
-    run: ()=>ExecutionOutput
+    run: ()=>ExecutionOutput,
+    vm: Machine
 }
 export type Asset = {
     cap: number,

@@ -256,7 +256,6 @@ export const InstructionSet: Record<string, Opcode> = {
         assert(){
             const key = this.peek(-1);
             const object = this.peek(-2);
-            console.log("Picking", key, 'from', object);
             if (typeof object !== 'object')
                 return this.abort(`[OPCODE PICK] target should be object or array`);
             if (typeof key !== 'number' && typeof key !== 'string')
@@ -287,7 +286,13 @@ export const InstructionSet: Record<string, Opcode> = {
     },
     SKIP: { //Unconditionally shifts the PC
         code: 46,
-        gas: 1
+        gas: 1,
+        wide: true
+    },
+    MAP: {
+        code: 47,
+        gas: 0, //Gas is calculated when the nested VM exits
+        wide: true //Callback
     },
     DBG: {
         code: 1337,
