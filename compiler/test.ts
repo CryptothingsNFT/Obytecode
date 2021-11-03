@@ -6,8 +6,9 @@ import type {VMInterface} from "../vm/types";
 const initSection: string = `init: "{
         $arr = ["a", "b", this_address, trigger.address];
         $arr1 = map($arr, 4, ($x, $i) => $x || this_address || $i);
-        $arr3 = map($arr, 4, ($x, $i) => $x || $i);
-        bounce($arr3);
+        $arr3 = map(["a", "b", this_address, trigger.address], 4, ($x, $i) => $x || $i);
+        $arr4 = map(["a", "b", this_address, trigger.address], 4, ($x, $i) => $x || $i);
+        bounce($arr4);
     }"`;
 
 const code: string = `{

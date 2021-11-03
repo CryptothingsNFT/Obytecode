@@ -175,7 +175,7 @@ export const InstructionSet: Record<string, Opcode> = {
         wide: true, //Position to read from the memory into the stack
         assert(){
             if (this.userland[this.memory[this.pc+1]] === undefined)
-                throw new Error(`[OPCODE LOAD] attempted to load an nonexistent memory value: [${this.userland}][${this.pc+1}]`);
+                return this.abort(`[OPCODE LOAD] attempted to load an nonexistent memory value: [${this.userland}][${this.pc+1}]`);
         }
     },
     IS_TRUTHY: { //Pushes true to the stack if the head is truthy and false otherwise

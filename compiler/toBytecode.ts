@@ -309,7 +309,15 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             return bytecode;
         }
         else if (n[0] === 'map'){
-            const array: Array<any> = toBytecode(n[1]);
+            //ensure the AST always has this form ["local_var","arr"]
+            //AST may have this form ["array",["a","b",["this_address"],["trigger.address"]]] when the array is defined in place thus we need to move this into a variable
+            if (n[1][0] === 'array') { //The array was built in-place. We can deduplicate it since there is no way to mutate it inside the map CB
+                const inPlaceArrMangled: string = '1' + JSON.stringify(n[1][0]);
+                if (ctx.var2address[inPlaceArrMangled] === undefined) //If the same array was already used in-place there is no need to define another copy
+                    bytecode.push(...toBytecode(['local_var_assignment', inPlaceArrMangled, n[1]]));
+                n[1] = ['local_var', "1" + JSON.stringify(n[1][0])];
+            }
+            const array: Array<any> = Array.isArray(n[1][0]) ? toBytecode(n[1]) : toBytecode(n[1]);
             const fn: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]) : n[3][1]; //Else is local var
             const fnKey: string = JSON.stringify(n[3][2]);
             if (Array.isArray(n[3])) //Declare the callback first (empty if the function has been deduped)
@@ -328,7 +336,7 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             return bytecode;
         }
         else
-            throw new Error("[compiler] Unimplemented AST node " + n);
+            throw new Error("[compiler] Unimplemented AST node " + JSON.stringify(n));
     });
     //Reset for next usage
     return bytecode;
