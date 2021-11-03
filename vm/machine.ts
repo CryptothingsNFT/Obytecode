@@ -1,10 +1,9 @@
 import {createHash} from "crypto";
 import {Assertions, Gas, Instructions, WideOpcodes} from './ops';
-import READ from "./implementation/READ";
-import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
 import {DIGEST_ENCODINGS, REGISTERS} from "./types";
 import {bytecode2ASM} from "../compiler/utils";
-import handleInterruption from "./interruptions/handleInterruption";
+import READ from "./implementation/READ";
+import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
 
 //The returned function can be used to resume execution after an interruption
 const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<ExecutionOutput> = (state: Machine, opts: ExecutionOptions = {})=>{
@@ -38,10 +37,6 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
 
             // execute instructions
             switch (instruction) {
-                case Instructions.END_LABEL:
-                    break;
-                case Instructions.NOP:
-                    break;
                 case Instructions.IMM: {
                     state.push(next);
                     break;
@@ -103,25 +98,26 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
 
 
                     const VM: VMInterface = makeVm({log: true});
-                    const [fnStart, fnEnd] = state.labels[next];
-                    const fnCode: Array<any> = state.memory.slice(fnStart, fnEnd);
-                    const finalArray = truncateAt ? array.slice(0, truncateAt) : array;
+                    const [fnStart, fnEnd]: [number, number] = state.labels[next];
+                    const finalArray: Array<any> = truncateAt ? array.slice(0, truncateAt) : array;
                     //Loop unrolling to save gas from jumps
+                    const declarations = state.memory.slice(0, state.memory.lastIndexOf(Instructions.END_LABEL)+2);
                     const vmCode: Array<any> = [
+                        ...declarations, //Copy the hoisted functions so the nested VM can call them
                         Instructions.IMM, [], //To store the results
-                        Instructions.IMM, array[0],
-                        Instructions.MEM, elementMemorySlot,
                         //[array]
                         ...Array.from({length: finalArray.length}, (_: never, i: number) => [
-                            Instructions.IMM, i, //Store index
                             ...(usesIndex ? [
-                                Instructions.DUP_HEAD,
+                                Instructions.IMM, i, //Store index
                                 Instructions.MEM, elementMemorySlot + 1, //Update index var which is always the slot after the element var
                             ] : []), //Do not touch the index var slot if the function does not access the index. It will overwrite another unrelated var
-                            ...fnCode,
+                            Instructions.IMM, array[i],
+                            Instructions.MEM, elementMemorySlot,
+                            Instructions.CALL, next,
+                            Instructions.IMM, i,
+                            Instructions.SWAP,
                             //[array, index, mapped]
-                            Instructions.DEF,
-                            ...(i + 1 < array.length ? [Instructions.IMM, array[i + 1], Instructions.MEM, elementMemorySlot] : []),
+                            Instructions.DEF
                         ]).flat(),
                     ];
                     // @ts-ignore
@@ -129,23 +125,18 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
                     //These are all references. The nested VM will take care of updating them for the parent VM
                     VM.vm.regs = state.regs;
                     VM.vm.userland = state.userland;
-                    VM.vm.labels = state.labels;
                     VM.vm.apps = state.apps;
                     VM.vm.stateChanges = state.stateChanges;
                     VM.vm.map = state.map;
-                    //TODO pass interruptions to the real host
-                    let result;
-                    do {
-                        result = await VM.run();
-                        if (result.interruption) { //If the nested VM hits an interruption we should handle it here
-                            const data: any = await handleInterruption(result);
-                            VM.write(data);
-                        }
-                    } while (result.interruption)
+
+                    const result = await VM.run();
+                    if (result.error)
+                        return state.abort(result.error);
                     //Extract the mapped array from the VM
                     state.push(VM.vm.stack[0]);
                     //Account for the gas used by the nested VM. Sadly we can't pass a number by reference
                     state.usedGas += VM.vm.usedGas;
+                    delete VM.vm;
                     break;
                 }
                 case Instructions.LOAD:
@@ -313,24 +304,25 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
                     return state.abort(`program aborted normally with ${JSON.stringify(state.pop())}`);
                 }
                 case Instructions.LABEL: {
-                    const initialPC: number = state.pc + 2;
+                    const initialPC: number = state.pc;
                     //TODO introduce support for nested labels
                     let endPC: number;
                     let openCounter = 0;
-                    for (let i = initialPC; i < state.memory.length; ++i) {
+                    for (let i = initialPC+1; i < state.memory.length; ++i) {
                         if (state.memory[i] === Instructions.LABEL)
                             openCounter++;
                         if (state.memory[i] === Instructions.END_LABEL) {
                             openCounter--;
-                            if (openCounter === -1)
+                            if (openCounter === -1) {
                                 endPC = i;
+                                break;
+                            }
                         }
                     }
                     if (endPC === undefined)
                         return state.abort("Unclosed label");
                     state.labels[next] = [initialPC, endPC];
                     state.pc = endPC; //Skip the END_LABEL, the NOP and the IJMP altogether
-                    state.memory[endPC] = Instructions.IJMP; //Replace LABEL_END with IJMP
                     break;
                 }
                 case Instructions.INC: {
@@ -342,9 +334,13 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
                     const labelName: string = next;
                     const spc: number = state.pc;
                     const [start, end]: [number, number] = state.labels[labelName];
-                    state.pc = start - 2;//Substract 2 to account for the auto-increment
-                    state.memory[end + 1] = spc; //Should be null memory now it is overwritten with the jump location (pc before the call)
+                    state.memory[end+1] = spc; //Should be null memory now it is overwritten with the jump location (pc before the call)
+                    state.pc = start;//Substract 3 to account for the auto-increment
                     break;
+                }
+                case Instructions.END_LABEL: {
+                    if (next === 0)
+                        return state.abort("NOWHERE TO JUMP AFTER END_LABEL"+state.memory[state.pc+1]);
                 }
                 case Instructions.IJMP: {
                     state.pc = next;
@@ -373,12 +369,9 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
                     break;
                 }
                 //IO
-                case Instructions.READ: {
-                    const result = READ.bind(state)();
-                    if (result) { //Needs interruption
-                        state.pc += 2;
-                        return result;
-                    }
+                case Instructions.READ: { //Unstub
+                    const result: any = await READ.bind(state)();
+                    state.push(result);
                     break;
                 }
                 case Instructions.PUSH_APP: {

@@ -1,15 +1,13 @@
 import parse from "./toAST";
 import toBytecode from "./toBytecode";
 import {makeVm} from "../vm/machine";
-import {run as hostRun} from "../vm/host";
 import type {VMInterface} from "../vm/types";
 
 const initSection: string = `init: "{
         $arr = ["a", "b", this_address, trigger.address];
-        $arr1 = map($arr, 4, ($x, $i) => $x || $i || $i);
-        $arr2 = map($arr1, 4, ($x, $i) => $x || $i || $i);
-        $arr3 = map($arr1, 4, ($x, $i) => $x || $i || $i);
-        bounce($arr2);
+        $arr1 = map($arr, 4, ($x, $i) => $x || this_address || $i);
+        $arr3 = map($arr, 4, ($x, $i) => $x || $i);
+        bounce($arr3);
     }"`;
 
 const code: string = `{
@@ -72,5 +70,5 @@ console.log("Oscript", strippedInit, strippedInit.length);
 console.log('Tape length', initBytecode.length);
 
 console.log("BEGIN EXECUTION:");
-console.log(await hostRun(vm));
+console.log(await vm.run());
 console.log("EXECUTION ENDED");

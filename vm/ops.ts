@@ -88,8 +88,8 @@ export const InstructionSet: Record<string, Opcode> = {
     END_LABEL: { //The previously opened label is closed here
         gas: 1,
         assert(){
-            if (this.memory[this.pc+1] !== 0)
-                return this.abort(`[OPCODE END_LABEL] there must be a NOP after the opcode`);
+            if (this.memory[this.pc+1] === 0)
+                return this.abort(`[OPCODE END_LABEL] there must be a NON-ZERO value after the opcode`);
         },
         code: 19,
         wide: true //Has a NOP after the closing label to store the location to jump after the label is executed
@@ -157,7 +157,7 @@ export const InstructionSet: Record<string, Opcode> = {
         code: 28,
         assert(){
             if (this.stack.length < 2)
-                return this.abort('[OPCODE AA] the stack has less than 2 elements');
+                return this.abort('[OPCODE ADD] the stack has less than 2 elements');
             const operand1 = this.peek(-1);
             const operand2 = this.peek(-2);
             if (typeof operand1 !== 'string' && typeof operand2 !== 'string') { //If one of them is a string any concatenation is valid

@@ -36,14 +36,6 @@ export enum READ_ARGUMENT {
     MCI,
     TIMESTAMP,
 }
-export enum INTERRUPT_ARGUMENT {
-    DATA_FEED,
-    BALANCE,
-    UNIT,
-    VARIABLE,
-    ASSET
-}
-export const INTERRUPT_SET: Set<number> = new Set(Object.keys(REGISTERS).filter((x: string): boolean=> typeof x === "string").map((key: string): number => REGISTERS[key]));
 export const enum APP_TYPE {
     PAYMENT,
     DATA,
@@ -75,14 +67,11 @@ export type PAYLOAD_TYPE = Object;
 
 
 export type ExecutionOutput = {
+    error?: string;
     stack: Array<any>,
     gas: number,
     stateChanges?: Record<string, string>,
-    apps?: Array<Record<string, any>>,
-    interruption?: {
-        type: INTERRUPT_ARGUMENT,
-        payload: Record<string, any>
-    }
+    apps?: Array<Record<string, any>>
 }
 export type ExecutionOptions = {
     debug?: boolean,

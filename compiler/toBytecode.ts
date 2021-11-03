@@ -1,8 +1,8 @@
-import {Instructions, WideOpcodes} from "../vm/ops";
+import {Instructions} from "../vm/ops";
 import {bytecode2ASM, isBinaryOp, isInAST, replaceDeep, typeVar} from "./utils";
 import {READ_ARGUMENT, REGISTERS} from "../vm/types";
 
-type CTX = {functionCode:Array<any>, currentFn: number, functions: Record<string, number>, node: number, currentMemorySlot: number, address2var: Record<number, string>, var2address:Record<string, number>, varReplacement: Record<string, string>};
+type CTX = {functionCode:Array<any>, codeSection: Array<any>, currentFn: number, functions: Record<string, number>, node: number, currentMemorySlot: number, address2var: Record<number, string>, var2address:Record<string, number>, varReplacement: Record<string, string>};
 
 let ctx: CTX = {
     node: -1,
@@ -12,31 +12,8 @@ let ctx: CTX = {
     address2var: {},
     var2address: {},
     varReplacement: {},
+    codeSection: [],
     functionCode: []
-}
-
-const hoistFns = (bytecode: Array<any>, extracted = []): Array<any>=>{
-    let fnStart;
-    let fnCount = 0;
-    let i = 0;
-    while (i<bytecode.length){
-        if (bytecode[i] === Instructions.LABEL) {
-            fnStart = i;
-            fnCount++;
-        }
-        else if (bytecode[i] === Instructions.END_LABEL) {
-            const fnLength = i-fnStart+2;
-            extracted.push(...bytecode.splice(fnStart, fnLength)); //Store function and delete it from bytecode
-            i = 0;
-            continue;
-        }
-        if (WideOpcodes.has(bytecode[i]))
-            i++;
-        i++;
-    }
-    if (fnCount > extracted.length)
-        return hoistFns([...extracted, ...bytecode], extracted);
-    return [...extracted, ...bytecode];
 }
 
 const isFnKnown = (body: Array<any>): boolean=>{
@@ -194,17 +171,17 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
         }
         else if (n[0] === "func_declaration"){
             const fnInnerBody: Array<any> = toBytecode(n[2], []);
-            let renamedInnerBody: Array<any> = [...n[2]];
-
             if (!isFnKnown(fnInnerBody)) { //Only emit bytecode if the function is unknown
-                const fnKey: string = JSON.stringify(fnInnerBody);
+                const fnKey: string = JSON.stringify(n[2]);
+                toBytecode(n[1].map((x, i)=>['local_var_assignment', fnKey+i, 0]));//Assign memory slots
+                let renamedInnerBody: Array<any> = [...n[2]];
                 for (let i=0;i<n[1].length;++i)
                     renamedInnerBody = replaceDeep(renamedInnerBody, ['local_var', n[1][i]], ['local_var', fnKey+i]);
-                const fnBody: Array<any> = [...toBytecode(n[1].map((x, i)=>['local_var_assignment', fnKey+i, 0])), Instructions.LABEL, ctx.currentFn, ...toBytecode(renamedInnerBody), Instructions.END_LABEL, Instructions.NOP];
-                bytecode.push(...fnBody);
+                const fnBody: Array<any> = [Instructions.LABEL, ctx.currentFn, ...toBytecode(renamedInnerBody), Instructions.END_LABEL, Instructions.NOP];
+                ctx.codeSection.push(...fnBody);
                 ctx.functions[fnKey] = ctx.currentFn;
                 ctx.currentFn++;
-                return bytecode
+                return [];
             }
             return [];
         }
@@ -334,8 +311,7 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
         else if (n[0] === 'map'){
             const array: Array<any> = toBytecode(n[1]);
             const fn: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]) : n[3][1]; //Else is local var
-            const innerBody: Array<any> = toBytecode(n[3][2]);
-            const fnKey: string = JSON.stringify(toBytecode(n[3][2]));
+            const fnKey: string = JSON.stringify(n[3][2]);
             if (Array.isArray(n[3])) //Declare the callback first (empty if the function has been deduped)
                 bytecode.push(...fn);
             const maxLength: number = typeVar(n[2]);
@@ -347,7 +323,7 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
                 ...(usesIndex ? [Instructions.IMM, true] : []),
 
                 //[array, maxLength]
-                Instructions.MAP, ctx.functions[JSON.stringify(innerBody)],
+                Instructions.MAP, ctx.functions[fnKey],
             ); //Load the array into the stack [array, array]
             return bytecode;
         }
@@ -360,7 +336,7 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
 
 export default (ast: Array<any>)=>{
     const raw: Array<any> = toBytecode(ast);
-    const processed: Array<any> = hoistFns(raw);
-    setImmediate(()=>ctx = { functionCode: [], currentFn: 0, functions: {}, node: -1, currentMemorySlot: 0, address2var: {}, var2address: {}, varReplacement: {}});
+    const processed: Array<any> = [...ctx.codeSection, ...raw];
+    setImmediate(()=>ctx = { functionCode: [], codeSection: [], currentFn: 0, functions: {}, node: -1, currentMemorySlot: 0, address2var: {}, var2address: {}, varReplacement: {}});
     return processed;
 };
