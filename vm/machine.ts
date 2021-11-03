@@ -1,17 +1,17 @@
 import {createHash} from "crypto";
 import {Assertions, Gas, Instructions, WideOpcodes} from './ops';
 import READ from "./implementation/READ";
-import {DIGEST_ENCODINGS, REGISTERS} from "./types";
 import type {ExecutionOptions, ExecutionOutput, InitialExecutionContext, Machine, VMInterface} from "./types";
+import {DIGEST_ENCODINGS, REGISTERS} from "./types";
 import {bytecode2ASM} from "../compiler/utils";
-import {deserialize, serialize} from "v8";
+import handleInterruption from "./interruptions/handleInterruption";
 
 //The returned function can be used to resume execution after an interruption
-const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (state: Machine, opts: ExecutionOptions = {})=>{
+const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<ExecutionOutput> = (state: Machine, opts: ExecutionOptions = {})=>{
     let instruction: number = null;
     let next: any;
     let lhs: any, rhs: any; //Used for multiple opcodes
-    return (): ExecutionOutput=>{
+    return async (): Promise<ExecutionOutput> => {
         if (state.regs[REGISTERS.INPUT_REGISTRY]) //We just woke up after an interrupt. Let's push the value that was just written to the input registry
             state.push(state.regs[REGISTERS.INPUT_REGISTRY]);
         while (instruction !== Instructions.NOP && state.pc < state.memory.length) {
@@ -47,23 +47,23 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     break;
                 }
                 case Instructions.ADD:
-                    rhs = state.pop();
                     lhs = state.pop();
+                    rhs = state.pop();
                     state.push(rhs + lhs);
                     break;
                 case Instructions.SUB:
-                    rhs = state.pop();
                     lhs = state.pop();
+                    rhs = state.pop();
                     state.push(lhs - rhs);
                     break;
                 case Instructions.MUL:
-                    rhs = state.pop();
                     lhs = state.pop();
+                    rhs = state.pop();
                     state.push(lhs * rhs);
                     break;
                 case Instructions.DIV:
-                    rhs = state.pop();
                     lhs = state.pop();
+                    rhs = state.pop();
                     state.push(lhs / rhs | 0); // integer division, rounds towards 0 (unlike Math.floor)
                     break;
                 case Instructions.POW: {
@@ -73,59 +73,78 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     break;
                 }
                 case Instructions.JEQ:
-                    rhs = state.pop();
                     lhs = state.pop();
+                    rhs = state.pop();
                     if (lhs === rhs)
                         state.pc = state.regs[REGISTERS.JUMP_REGISTRY];
                     else
                         state.pc++;
                     break;
                 case Instructions.JNE: {
-                    rhs = state.pop();
                     lhs = state.pop();
+                    rhs = state.pop();
                     if (lhs !== rhs)
                         state.pc = state.regs[REGISTERS.JUMP_REGISTRY];
                     else
                         state.pc++;
                     break;
                 }
+                case Instructions.FLUSH: {
+                    state.stack = []
+                    break;
+                }
                 case Instructions.MAP: {
-                    const usesIndex = state.pop();
+                    const usesIndex = state.peek(-1) === true;
+                    if (usesIndex)
+                        state.pop();
                     const truncateAt: number = state.pop();
+                    const elementMemorySlot: number = state.pop();
                     const array: Array<any> = state.pop();
-                    const VM = makeVm({log: true});
+
+
+                    const VM: VMInterface = makeVm({log: true});
                     const [fnStart, fnEnd] = state.labels[next];
-                    const fnCode = state.memory.slice(fnStart, fnEnd);
+                    const fnCode: Array<any> = state.memory.slice(fnStart, fnEnd);
                     const finalArray = truncateAt ? array.slice(0, truncateAt) : array;
                     //Loop unrolling to save gas from jumps
-                    const vmCode: Array<any> = [Instructions.IMM, finalArray, ...Array.from({ length: finalArray.length }, (e, i) => [
-                        Instructions.DUP_HEAD,
-                        Instructions.IMM, i,
-                        Instructions.PICK,
-                        ...(usesIndex ? [Instructions.IMM, i, Instructions.SWAP] : []),
-                        ...fnCode,
-                        Instructions.IMM, i,
-                        Instructions.SWAP, Instructions.DEF
-                    ]).flat()];
+                    const vmCode: Array<any> = [
+                        Instructions.IMM, [], //To store the results
+                        Instructions.IMM, array[0],
+                        Instructions.MEM, elementMemorySlot,
+                        ...Array.from({length: finalArray.length}, (_: never, i: number) => [
+                            ...fnCode,
+                            //[mapped]
+                            Instructions.IMM, i, //Store index
+                            ...(usesIndex ? [
+                                Instructions.DUP_HEAD,
+                                Instructions.MEM, elementMemorySlot + 1, //Update index var which is always the slot after the element var
+                            ] : []), //Do not touch the index var slot if the function does not access the index. It will overwrite another unrelated var
+                            Instructions.SWAP,
+                            Instructions.DEF,
+                            ...(i + 1 < array.length ? [Instructions.IMM, array[i + 1], Instructions.MEM, elementMemorySlot] : []),
+                        ]).flat(),
+                    ];
                     // @ts-ignore
                     VM.load(vmCode);
-                    //References
+                    //These are all references. The nested VM will take care of updating them for the parent VM
                     VM.vm.regs = state.regs;
                     VM.vm.userland = state.userland;
                     VM.vm.labels = state.labels;
                     VM.vm.apps = state.apps;
                     VM.vm.stateChanges = state.stateChanges;
                     VM.vm.map = state.map;
-                    VM.vm.stack = state.stack;
                     //TODO pass interruptions to the real host
                     let result;
                     do {
-                        result = VM.run();
-                        if (result.interruption) {
-                            VM.vm.pc++;
-                            return result;
+                        result = await VM.run();
+                        if (result.interruption) { //If the nested VM hits an interruption we should handle it here
+                            const data: any = await handleInterruption(result);
+                            VM.write(data);
                         }
                     } while (result.interruption)
+                    //Extract the mapped array from the VM
+                    state.push(VM.vm.stack[0]);
+                    //Account for the gas used by the nested VM. Sadly we can't pass a number by reference
                     state.usedGas += VM.vm.usedGas;
                     break;
                 }
@@ -213,12 +232,12 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     break;
                 }
                 case Instructions.GET: {
-                    const key:string = state.pop();
+                    const key: string = state.pop();
                     state.push(state.map[key]);
                     break;
                 }
                 case Instructions.SKIP: {
-                    state.pc+= next;
+                    state.pc += next;
                     break;
                 }
                 case Instructions.SKIP_EQ: {
@@ -298,7 +317,7 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                     //TODO introduce support for nested labels
                     let endPC: number;
                     let openCounter = 0;
-                    for (let i = initialPC; i<state.memory.length;++i){
+                    for (let i = initialPC; i < state.memory.length; ++i) {
                         if (state.memory[i] === Instructions.LABEL)
                             openCounter++;
                         if (state.memory[i] === Instructions.END_LABEL) {
@@ -357,7 +376,7 @@ const makeRun: (state: Machine, opts: ExecutionOptions)=>()=>ExecutionOutput = (
                 case Instructions.READ: {
                     const result = READ.bind(state)();
                     if (result) { //Needs interruption
-                        state.pc+=2;
+                        state.pc += 2;
                         return result;
                     }
                     break;
@@ -422,7 +441,7 @@ export const makeVm = (opts?: {log?: boolean, debug?: boolean}): VMInterface=>{
             return {stack: this.stack, gas: this.usedGas, stateChanges: this.stateChanges, apps: this.apps, error: `[VM]${str.startsWith('[') ? str: ' '+str}`};
         },
     };
-    const run: () => ExecutionOutput = makeRun(vm, opts);
+    const run: () => Promise<ExecutionOutput> = makeRun(vm, opts);
     const load: (code: Array<any>, ctx: InitialExecutionContext) => void = (code: Array<any>, ctx: InitialExecutionContext): void=>{
         vm.memory = code;
         //Set readonly registers

@@ -60,3 +60,28 @@ export const bytecode2ASM = (bytecode: Array<any>)=>{
     }
     return output;
 }
+
+export const replaceOpcodes = (code: Array<any>, search: Array<number>, replacement: Array<number>)=>{
+    let match: number = 0;
+
+    for (let i = 0; i<code.length;i++){
+        if (code[i] === search[match])
+            match++;
+        if (match === search.length){
+            code.splice(i-match, match, replacement);
+            match = 0;
+        }
+        if (InstructionSet[code[i]].wide)
+            i++;
+    }
+    return code.flat();
+}
+
+export const isInAST = (AST: Array<any>, search: Array<any>): boolean=>{
+    return AST.map(x=>{
+        if (JSON.stringify(x) === JSON.stringify(search))
+            return true;
+        if (Array.isArray(x))
+            return isInAST(x, search);
+    }).some(x=>x===true);
+}

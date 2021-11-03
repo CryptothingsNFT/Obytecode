@@ -294,6 +294,10 @@ export const InstructionSet: Record<string, Opcode> = {
         gas: 0, //Gas is calculated when the nested VM exits
         wide: true //Callback
     },
+    FLUSH: {
+        code: 48,
+        gas: 0,
+    },
     DBG: {
         code: 1337,
         gas: 0

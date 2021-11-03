@@ -17,7 +17,7 @@ export enum REGISTERS {
     MCI_REGISTRY,
     TIMESTAMP_REGISTRY,
 }
-export const READ_ONLY_REGISTERS: Set<number> = new Set([REGISTERS.TRIGGER_REGISTRY, REGISTERS.THIS_ADDRESS_REGISTRY]);
+export const READ_ONLY_REGISTERS: Set<number> = new Set([REGISTERS.TRIGGER_REGISTRY, REGISTERS.THIS_ADDRESS_REGISTRY, REGISTERS.MCI_REGISTRY, REGISTERS.TIMESTAMP_REGISTRY]);
 export const REGISTER_SET: Set<number> = new Set(Object.keys(REGISTERS).filter((x: string): boolean=> typeof x === "string").map((key: string): number => REGISTERS[key]));
 export enum READ_DATA_FEED_OPTIONS {
     MIN_MCI,
@@ -56,7 +56,7 @@ export const enum DIGEST_ENCODINGS {
 export type VMInterface = {
     load: (code: Array<any>, ctx: InitialExecutionContext)=>void,
     write: (data: any)=>void,
-    run: ()=>ExecutionOutput,
+    run: ()=>Promise<ExecutionOutput>,
     vm: Machine
 }
 export type Asset = {

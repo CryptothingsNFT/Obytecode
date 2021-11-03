@@ -1,5 +1,5 @@
 import {Instructions, WideOpcodes} from "../vm/ops";
-import {bytecode2ASM, isBinaryOp, replaceDeep, typeVar} from "./utils";
+import {bytecode2ASM, isBinaryOp, isInAST, replaceDeep, typeVar} from "./utils";
 import {READ_ARGUMENT, REGISTERS} from "../vm/types";
 
 type CTX = {functionCode:Array<any>, currentFn: number, functions: Record<string, number>, node: number, currentMemorySlot: number, address2var: Record<number, string>, var2address:Record<string, number>, varReplacement: Record<string, string>};
@@ -93,7 +93,7 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             }
             else {
                 const varname: string = n[1];
-                if (ctx.var2address[varname])
+                if (ctx.var2address[varname] && !varname.startsWith('[')) //Parameter local vars start with [
                     throw new Error(`Variable ${n[1]} was redeclared`);
                 const value: any = n[2];
                 ctx.var2address[varname] = ctx.currentMemorySlot;
@@ -193,12 +193,15 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             return bytecode;
         }
         else if (n[0] === "func_declaration"){
-            n[1].forEach(x=>n[2] = replaceDeep(n[2], ['local_var', x], ['bytecode', []]));
             const fnInnerBody: Array<any> = toBytecode(n[2], []);
+            let renamedInnerBody: Array<any> = [...n[2]];
+
             if (!isFnKnown(fnInnerBody)) { //Only emit bytecode if the function is unknown
-                const fnBody: Array<any> = [Instructions.LABEL, ctx.currentFn, ...fnInnerBody, Instructions.END_LABEL, Instructions.NOP];
-                bytecode.push(...fnBody);
                 const fnKey: string = JSON.stringify(fnInnerBody);
+                for (let i=0;i<n[1].length;++i)
+                    renamedInnerBody = replaceDeep(renamedInnerBody, ['local_var', n[1][i]], ['local_var', fnKey+i]);
+                const fnBody: Array<any> = [...toBytecode(n[1].map((x, i)=>['local_var_assignment', fnKey+i, 0])), Instructions.LABEL, ctx.currentFn, ...toBytecode(renamedInnerBody), Instructions.END_LABEL, Instructions.NOP];
+                bytecode.push(...fnBody);
                 ctx.functions[fnKey] = ctx.currentFn;
                 ctx.currentFn++;
                 return bytecode
@@ -328,29 +331,26 @@ const toBytecode = (ast, bytecode: Array<any> = [], localCtx?: any): Array<any>=
             bytecode.push(...op1, ...op2, comparison);
             return bytecode;
         }
-        else if (n[0] === 'map'){ //TODO if array is not too long we should use loop unrolling instead to save ops
+        else if (n[0] === 'map'){
             const array: Array<any> = toBytecode(n[1]);
             const fn: Array<any> = Array.isArray(n[3]) ? toBytecode(n[3]) : n[3][1]; //Else is local var
             const innerBody: Array<any> = toBytecode(n[3][2]);
+            const fnKey: string = JSON.stringify(toBytecode(n[3][2]));
             if (Array.isArray(n[3])) //Declare the callback first (empty if the function has been deduped)
                 bytecode.push(...fn);
             const maxLength: number = typeVar(n[2]);
-            const usesIndex: boolean = n?.[3]?.[1]?.length === 2; //CB has one argument
-
+            const usesIndex: boolean = n?.[3]?.[1]?.length === 2 && isInAST(n[3][2], ["local_var", n[3][1][1]]); //CB has one argument & it is used at least once in the function
             bytecode.push(
                 ...array,
-
-                Instructions.IMM, 0,
-                Instructions.REG, REGISTERS.OPTS_REGISTRY,
+                Instructions.IMM, ctx.var2address[fnKey+'0'], //ELEMENT
                 Instructions.IMM, maxLength,
-                Instructions.IMM, usesIndex,
+                ...(usesIndex ? [Instructions.IMM, true] : []),
 
+                //[array, maxLength]
                 Instructions.MAP, ctx.functions[JSON.stringify(innerBody)],
             ); //Load the array into the stack [array, array]
             return bytecode;
         }
-        else if (n[0] === 'bytecode')
-            return n[1];
         else
             throw new Error("[compiler] Unimplemented AST node " + n);
     });
