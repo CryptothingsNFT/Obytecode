@@ -111,15 +111,15 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
                         Instructions.IMM, [], //To store the results
                         Instructions.IMM, array[0],
                         Instructions.MEM, elementMemorySlot,
+                        //[array]
                         ...Array.from({length: finalArray.length}, (_: never, i: number) => [
-                            ...fnCode,
-                            //[mapped]
                             Instructions.IMM, i, //Store index
                             ...(usesIndex ? [
                                 Instructions.DUP_HEAD,
                                 Instructions.MEM, elementMemorySlot + 1, //Update index var which is always the slot after the element var
                             ] : []), //Do not touch the index var slot if the function does not access the index. It will overwrite another unrelated var
-                            Instructions.SWAP,
+                            ...fnCode,
+                            //[array, index, mapped]
                             Instructions.DEF,
                             ...(i + 1 < array.length ? [Instructions.IMM, array[i + 1], Instructions.MEM, elementMemorySlot] : []),
                         ]).flat(),
@@ -310,7 +310,7 @@ const makeRun: (state: Machine, opts?: ExecutionOptions) => () => Promise<Execut
                     console.log("Userland", state.userland);
                     console.log("Stack", state.stack);
                     console.log("PROGRAM WILL NOW ABORT");
-                    return state.abort(`program aborted normally with ${state.pop()}`);
+                    return state.abort(`program aborted normally with ${JSON.stringify(state.pop())}`);
                 }
                 case Instructions.LABEL: {
                     const initialPC: number = state.pc + 2;

@@ -5,9 +5,11 @@ import {run as hostRun} from "../vm/host";
 import type {VMInterface} from "../vm/types";
 
 const initSection: string = `init: "{
-        $arr = ["a", "b"];
-        $arr1 = map($arr, 2, ($x, $i) => $x || $i || $i);
-        bounce($arr1);
+        $arr = ["a", "b", this_address, trigger.address];
+        $arr1 = map($arr, 4, ($x, $i) => $x || $i || $i);
+        $arr2 = map($arr1, 4, ($x, $i) => $x || $i || $i);
+        $arr3 = map($arr1, 4, ($x, $i) => $x || $i || $i);
+        bounce($arr2);
     }"`;
 
 const code: string = `{
